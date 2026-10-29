@@ -1,0 +1,48 @@
+From: SPR framework/VIO team
+Subject: [PATCH] PX4 1.16 IMU publication interval and DDS timesync instance
+
+Base: PX4-Autopilot 6ea3539157ca358c70a515878b77077af7d4611d (v1.16.0)
+
+Keep SensorCombined at a 4 ms maximum notification interval and select the
+DDS TimesyncStatus instance by source_protocol rather than assuming instance 0.
+This patch changes transport selection/rate, not uORB or ROS message schemas.
+Actual >=200 Hz delivery and <=1 ms clock quality still require rig validation.
+
+--- a/src/modules/uxrce_dds_client/dds_topics.h.em
++++ b/src/modules/uxrce_dds_client/dds_topics.h.em
+@@ -96,9 +96,33 @@
+ 	bool ret = true;
+ 	for (unsigned idx = 0; idx < sizeof(send_subscriptions)/sizeof(send_subscriptions[0]); ++idx) {
+ 		if (fds[idx].events == 0) {
+-			fds[idx].fd = orb_subscribe(send_subscriptions[idx].orb_meta);
++			if (send_subscriptions[idx].orb_meta == ORB_ID(timesync_status)) {
++				// MAVLink can own instance 0. Export the DDS clock estimator only.
++				fds[idx].fd = -1;
++				for (unsigned instance = 0; instance < ORB_MULTI_MAX_INSTANCES; ++instance) {
++					const int candidate = orb_subscribe_multi(ORB_ID(timesync_status), instance);
++					timesync_status_s status{};
++					if (candidate >= 0 && orb_copy(ORB_ID(timesync_status), candidate, &status) == PX4_OK
++					    && status.source_protocol == timesync_status_s::SOURCE_PROTOCOL_DDS) {
++						fds[idx].fd = candidate;
++						break;
++					}
++					if (candidate >= 0) {
++						orb_unsubscribe(candidate);
++					}
++				}
++				if (fds[idx].fd < 0) {
++					PX4_ERR("DDS timesync_status instance unavailable");
++					return false;
++				}
++			} else {
++				fds[idx].fd = orb_subscribe(send_subscriptions[idx].orb_meta);
++			}
+ 			fds[idx].events = POLLIN;
+-			orb_set_interval(fds[idx].fd, UXRCE_DEFAULT_POLL_RATE);
++			// Give the >=200 Hz IMU path headroom; keep other topics at 100 Hz.
++			const unsigned interval_ms = send_subscriptions[idx].orb_meta == ORB_ID(sensor_combined)
++						     ? 4 : UXRCE_DEFAULT_POLL_RATE;
++			orb_set_interval(fds[idx].fd, interval_ms);
+ 		}
+ 
+ 		if (!create_data_writer(session, reliable_out_stream_id, participant_id, static_cast<ORB_ID>(send_subscriptions[idx].orb_meta->o_id), client_namespace, send_subscriptions[idx].topic,

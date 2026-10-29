@@ -1,0 +1,41 @@
+# Jazzy host agent. Firmware and generated message definitions are separate pins.
+schema_version: 1
+agent:
+  repository: https://github.com/eProsima/Micro-XRCE-DDS-Agent.git
+  version: 2.4.3
+  commit: 73622810d984349b80bbac0ef55fc0b694d62222
+  tag: v2.4.3
+logger:
+  # Agent 2.4.3's ostream formatting is incompatible with Ubuntu fmt9/spdlog1.12.
+  repository: https://github.com/gabime/spdlog.git
+  version: 1.9.2
+  commit: eb3220622e73a4889eee355ffa37972b3cac3df5
+  bundled_fmt: true
+  linkage: static
+host:
+  architecture: amd64
+  os: ubuntu-24.04
+  ros: jazzy
+  prefix: ~/.local/opt/spr-microxrce-agent/2.4.3
+  dependencies:
+    # Existing ROS/system libraries; no floating dependency fetch during CMake.
+    ros-jazzy-fastrtps: 2.14.6-1noble.20260303.233638
+    ros-jazzy-fastcdr: 2.2.7-1noble.20260225.051855
+    cmake: 3.28.3-1build7
+  cmake:
+    UAGENT_SUPERBUILD: false
+    UAGENT_USE_SYSTEM_FASTDDS: true
+    UAGENT_USE_SYSTEM_FASTCDR: true
+    UAGENT_USE_SYSTEM_LOGGER: true
+    UAGENT_CED_PROFILE: false
+    UAGENT_P2P_PROFILE: false
+    UAGENT_BUILD_TESTS: false
+firmware:
+  repository: https://github.com/PX4/PX4-Autopilot.git
+  tag: v1.16.0
+  commit: 6ea3539157ca358c70a515878b77077af7d4611d
+  board: micoair_h743-v2_default
+  patch: 0001-imu-rate-and-dds-timesync-instance.patch
+messages:
+  repository: https://github.com/PX4/px4_msgs.git
+  commit: 392e831c1f659429ca83902e66820d7094591410

@@ -1,0 +1,20 @@
+px4_bridge:
+  ros__parameters:
+    sensor_topic: /fmu/out/sensor_combined
+    timesync_topic: /fmu/out/timesync_status
+    imu_topic: /spr/imu
+    diagnostics_topic: /spr/diagnostics
+    imu_frame_id: imu_link
+    input_time_domain: agent_synced
+    timestamp_source: integration_midpoint
+    sync_min_samples: 20
+    sync_max_uncertainty_us: 1000.0
+    sync_timeout_s: 2.5
+    sync_max_offset_step_us: 1000.0
+    max_clock_step_s: 0.01
+    max_transport_age_s: 0.2
+    max_gap_s: 0.1
+    interpolation_max_gap_s: 0.02
+    min_rate_hz: 200.0
+    gyro_variance: [-1.0, -1.0, -1.0]
+    accel_variance: [-1.0, -1.0, -1.0]
