@@ -1,0 +1,130 @@
+# D435i 双目与飞控 IMU 离线联合标定
+
+本流程实现 `Project.md` 的 REQ-CAL-002/003/004/006/007/008/010/011。求解器使用实际 Kalibr；工具不会生成代替测量的数据或默认 IMU 噪声。硬件由 `drone_bringup` 独占，离线程序不打开设备。
+
+## 当前采用 MAVLink，DDS 冻结
+
+按当前任务约定，联合标定显式选择 **`mavlink_calibration`**：飞控 USB 的 `HIGHRES_IMU` 经 MAVLink `TIMESYNC` 映射到主机时间，发布 `/spr/calibration/imu`、`imu_link`。DDS 的源码、固件、Agent 和 `px4_bridge` 不在本次修改范围内。离线命令不指定 `--profile` 时仍保留原有 `dds_runtime` 合同，避免旧录包或旧脚本被默默解释为新的 MAVLink 流程。
+
+当前用户明确接受“达不到先用 140 Hz 测试”，因此只将本 MAVLink 测试阶段的最低实测频率设为 **140 Hz**；DDS 运行通路及原 ≥200 Hz 目标保持原要求。所有产物显式记录 `calibration_phase: mavlink_140hz_test`、`deployment_scope: mavlink_140hz_test_only`、`minimum_observed_imu_rate_hz: 140.0`、`original_dds_200hz_requirement_satisfied: false`。这不是原 A0/DDS ≥200 Hz 验收通过声明。
+
+两条路径不互相代替：MAVLink 候选、Allan、留出集、回放和发布产物都必须显式选择同一 profile。即使通过本测试阶段所有检查，也不证明 DDS 采样或时间语义等价，不会自动成为 DDS 运行配置。既有 MAVROS `/mavros/imu/data_raw` 录包仍只能做格式回归。`formal_eligible`/`VALIDATED` 在此只表示通过已标注 profile 的血缘与数值检查，使用范围始终由上述阶段字段限制。
+
+`HIGHRES_IMU` 的数值是 PX4 已做估计器偏置补偿的区间均值，时间戳采用 `vehicle_imu.timestamp_sample` 端点；消息没有积分时长、独立加速度时间、裁剪/标定计数或完整设备标识。程序保留这些限制，不重造“积分中点”，不将其标记为原始未补偿 IMU。TIMESYNC 的 RTT/拟合误差描述时钟映射，不能独自证明相机与 IMU 的物理采样误差 ≤1 ms；仍须实际运动、留出集时间符号和残差检验。
+
+MAVLink header 使用实测仿射时钟映射 `host_ns = reference_host_ns + clock_scale × (px4_ns − reference_px4_ns)`；manifest 保留参考时刻、比例、漂移、RTT 和拟合残差。`T_host_px4_offset_s` 仅表示该参考时刻的局部偏移，不能当成长时间录制的常量补偿。离线程序不会用偏移量重写已映射的消息。
+
+## 环境与入口
+
+先完成根工作区构建并加载 ROS 与工作区环境，再启用独立离线工具环境：
+
+```bash
+source /opt/ros/jazzy/setup.bash
+source install/setup.bash
+/usr/bin/python3 -m venv --system-site-packages .venv-calibration
+.venv-calibration/bin/python -m pip install -r src/calibration/requirements-tools.txt
+source .venv-calibration/bin/activate
+ros2 run calibration joint_calibrate.py --help
+docker image inspect rm-nav-kalibr:local
+```
+
+系统包提供 NumPy、OpenCV、PyYAML；`rosbags` 固定版本安装到 venv。Kalibr 镜像必须已经存在，求解时解析为不可变 image ID，以 `--network none` 运行，并记录容器内实际 Kalibr commit。不会隐式下载镜像。实际环境说明见 [environment.md](environment.md)。
+
+## 采集三类真实数据
+
+棋盘为 **8 列 × 11 行内角点，9 × 12 方格，边长 0.025 m**。方格边长须实测，图像识别无法验证毫米尺寸。相机与飞控必须刚性固定；静止、拟合和留出数据必须来自同一 MAVLink 采集版本及固定话题/采样语义。当前阶段的采集诊断和实际录包分别验证 IMU ≥140 Hz，配置请求或 ACK 不等于达到频率要求；其余 Allan 时长、时间同步、相机及留出质量门槛不变。
+
+```bash
+# 双目内参：移动棋盘，覆盖图像边角、距离、倾斜角。
+ros2 run tools spr record --profile mavlink_calibration --mode stereo --duration 180 --show-ui
+
+# Allan：预热后让整个相机/飞控组件保持静止，预留录制启动余量。
+ros2 run tools spr record --profile mavlink_calibration --mode allan --duration 3700
+
+# 联合：棋盘固定，移动整个相机/飞控组件，充分激励三轴旋转和平移。
+ros2 run tools spr record --profile mavlink_calibration --mode joint --duration 180 --show-ui
+```
+
+另录一段独立的 `joint` 会话作留出集，目标同样保持固定。避开棋盘对称姿态翻转和运动模糊。保存原始 rosbag2；PNG/CSV 是派生数据。不要把同一录包复制、改 metadata 或重新封装后当作留出数据。
+
+正式采集要求可复现且已提交的 Git 基线。`git.effective_clean` 只允许一条例外：根仓库其余部分干净，OpenVINS gitlink/HEAD 固定在约定基线，实际 diff、两个头文件及根仓库已提交补丁的哈希全部与 [兼容补丁](../docker/openvins/README.md) 一致；任何其他修改、暂存或未跟踪文件仍然拒绝。manifest 保留原始 Git status 和 `approved_patches`，不会隐去补丁状态。当前根仓库若尚无初始提交，只能显式使用 `--experimental` 调试；旧数据不会在提交后被追认为正式采集。MAVLink 流程要求实际 `mavlink_timesync` 诊断；原 DDS 流程仍要求自己的 DDS 同步证据，不能靠切换 profile 或重命名话题补齐。
+
+每个 run 的 manifest 包含实际完成录包的文件哈希。相机参数在启动后及结束前通过 `/camera/get_parameters` 读回，并与 rig、实际驱动包版本比对；配置请求本身不等于观测证明。飞控记录实际 `timesync_snapshot`、采集程序 commit、频率、样本语义和时钟映射不确定度。MAVLink 采集器已将 header 映射到主机；离线转换保留 header，不再次添加 `T_host_px4`。DDS 时间约定仍见 [time.md](time.md)。
+
+## 离线求解
+
+下列路径是操作示例中的会话位置，须替换为实际输出目录。每次求解使用新的输出目录。
+
+```bash
+ros2 run calibration joint_calibrate.py inspect --profile mavlink_calibration --bag runs/joint_001/bag
+
+ros2 run calibration calibrate \
+  --session runs/stereo_001/images/actual_session \
+  --output runs/stereo_001/intrinsics
+
+ros2 run calibration joint_calibrate.py allan \
+  --profile mavlink_calibration \
+  --bag runs/static_001/bag \
+  --session-manifest runs/static_001/manifest.yaml \
+  --output runs/static_001/allan
+
+ros2 run calibration joint_calibrate.py solve \
+  --profile mavlink_calibration \
+  --bag runs/joint_001/bag \
+  --camchain runs/stereo_001/intrinsics/camchain.yaml \
+  --imu runs/static_001/allan/imu.yaml \
+  --allan-report runs/static_001/allan/allan_report.yaml \
+  --session-manifest runs/joint_001/manifest.yaml \
+  --output runs/joint_001/solve
+```
+
+`inspect` 检查每条消息的类型、frame、时间戳、载荷及流模式。转换同时比较全部消息的记录时间、header 时间、像素/IMU/协方差哈希；逆序、重复时间戳不会被悄悄改写或排序。Allan 要求静止 ≥1 小时、采样间隔满足门槛，并在实际 Allan 曲线上找到白噪声 −1/2 和随机游走 +1/2 的拟合区域；找不到则延长采集，不填默认值。三轴分别拟合，导出各轴测量值的最大值及拟合报告。
+
+`solve` 产生 **CANDIDATE**，包含 Kalibr PDF、标准 YAML、完整联合协方差/相关性、输入血缘、工具版本和容器命令。尚未证明硬件标定有效。源录包、IMU Allan 和 bridge 版本的血缘不完整时，候选结果保持不可正式发布。
+
+## 留出集与 OpenVINS
+
+```bash
+ros2 run calibration joint_calibrate.py validate \
+  --profile mavlink_calibration \
+  --candidate runs/joint_001/solve --bag runs/joint_heldout_001/bag \
+  --session-manifest runs/joint_heldout_001/manifest.yaml
+
+ros2 run calibration joint_calibrate.py prepare-openvins \
+  --profile mavlink_calibration \
+  --candidate runs/joint_001/solve \
+  --estimator-template src/open_vins/config/euroc_mav/estimator_config.yaml
+```
+
+留出数据必须与训练记录的时间段和选定话题载荷独立，frame/profile 必须一致，使用记录的双目配对容差，配对率 ≥95%。正式验收还要通过独立采集 manifest 核对 bridge 版本、实际相机、曝光、驱动及录包哈希。检查 ≥30 对检测结果、固定双目外参的重投影误差、三轴陀螺仪与视觉转速匹配、加速度/重力/刚性杆臂一致性。时间符号独立检查遵循 **`t_imu = t_cam + timeshift_cam_imu`**。每次验证保留独立 `validation/attempt_*/`；数值通过后写入带哈希的 `selected.yaml`，失败尝试不覆盖历史；未证明采集血缘的结果仍不能发布。
+
+当前实现的数值门槛：留出 RMS ≤0.5 px、单图 RMS ≤1 px；时间偏移与留出搜索最优值相差 ≤5 ms、陀螺仪向量 RMS ≤0.15 rad/s；加速度向量 RMS ≤0.7 m/s²、重力模长 9.3–10.3 m/s²；局部 Kalibr 标准差分别 ≤2°、2 cm、5 ms。报告暴露不确定度和相关性；局部线性协方差不包含系统误差，这些检查也不能代替飞行振动/温漂验证。
+
+`prepare-openvins` 只在候选目录生成回放输入：双目 `max_cameras: 2`、`use_stereo: true`、`calib_cam_timeoffset: true`、实际 IR 话题和本 profile 的 `/spr/calibration/imu`。模板仅提供估计器调参，所有测得内外参、噪声、时间偏移来自候选结果。`T_cam_imu` 映射 IMU→相机；不改变 Kalibr 符号。cam0/cam1 时间差超过 1 ms 时拒绝单一双目时间偏移导出。OpenCV `%YAML:1.0` 仅在最终 OpenVINS 文件中产生。
+
+## 实际回放证据与发布
+
+本工具不伪造 OpenVINS 回放通过记录。实际回放/evaluator 应生成 `replay_metrics.yaml`，包含：
+
+- `status: PASSED`、实际 `run_id`、`diverged: false`；
+- MAVLink 流程还须记录 `calibration_profile: mavlink_calibration` 及上面的四个阶段/范围字段，与候选及实际回放话题一致；
+- `config_sha256`，与候选 `openvins_export.yaml` 完全一致；实际停止的 `bag_path` 及 `bag_sha256`，不得是训练 bag；
+- `reference.source` 和 `reference.accuracy`；有真值时测量 `metrics.ate_rmse_m`，门槛 ≤0.3 m；
+- `artifacts` 中的 `estimated_trajectory`、`replay_log`、`replay_command`、`evaluation_report`，每项均有真实 `path` 和 `sha256`。命令文件采用 YAML `argv` 列表；有真值还须 `reference_trajectory`；
+- 没有真值时 `reference.source: none`，禁止 ATE/RPE。须测量 `closed_loop_drift_m`、`repeatability_m`，提供经评审的 `proxy_limits`、`proxy_acceptance: true` 和 `acceptance_adr` 实际文件/哈希。**当前尚未批准代理指标门槛；没有对应决策不能据此正式发布。**
+
+```bash
+ros2 run calibration joint_calibrate.py export \
+  --profile mavlink_calibration \
+  --candidate runs/joint_001/solve \
+  --replay-evidence runs/replay_001/replay_metrics.yaml \
+  --destination calibrations
+```
+
+发布会重新核对采集、Allan、留出集、协方差、配置及回放文件哈希，并复制小型回放证据。本测试阶段验收产物使用不可覆盖的 `calibrations/mavlink_calibration_<UTC>_<commit>_<inputhash>/`，始终保留 `mavlink_140hz_test_only` 使用范围，不代表 DDS 原目标通过。原始大录包保留在 `runs/`。缺失实际数据、未通过门槛或血缘不符时退出失败，不发布占位标定。
+
+## 已有真实数据的转换验证
+
+`runs/offline_conversion_20261029T115739Z/` 保存既有 2026-10-28 录包的转换证据：左右图像各 1821 条，IMU 6078 条，总计 9720 条，转换前后全部语义载荷/时间/数量一致，实际 Noetic `rosbag info` 可读。该旧包的 IMU 来自 MAVROS，仅用于格式回归；约 60.8 秒的数据不足 Allan 门槛，也未证明棋盘或联合标定成功。报告仅归档小型证据，没有复制 1.4 GB 录包。
+
+依据：[Kalibr YAML 约定](https://github.com/ethz-asl/kalibr/wiki/Yaml-formats)、[IMU 噪声模型](https://github.com/ethz-asl/kalibr/wiki/IMU-Noise-Model)、[相机—IMU 标定](https://github.com/ethz-asl/kalibr/wiki/camera-imu-calibration)。

@@ -1,0 +1,125 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#5b6b7a"/>
+    </marker>
+    <marker id="arrow-dashed" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#7f93ad"/>
+    </marker>
+    <style>
+      .title { font: 700 22px "Noto Sans CJK SC", "Noto Sans CJK JP", sans-serif; fill: #1f2d3a; }
+      .subtitle { font: 12px "Noto Sans CJK SC", "Noto Sans CJK JP", sans-serif; fill: #5b6b7a; }
+      .group-label { font: 700 14px "Noto Sans CJK SC", "Noto Sans CJK JP", sans-serif; fill: #33414f; }
+      .box-title { font: 700 15px "Noto Sans CJK SC", "Noto Sans CJK JP", sans-serif; fill: #1f2d3a; }
+      .box-sub { font: 11.5px "Noto Sans CJK SC", "Noto Sans CJK JP", sans-serif; fill: #4a5a6a; }
+      .edge-label { font: 10.5px "Noto Sans CJK SC", "Noto Sans CJK JP", sans-serif; fill: #33414f; paint-order: stroke; stroke: #ffffff; stroke-width: 4px; stroke-linejoin: round; }
+      .edge-label-small { font: 9.5px "Noto Sans CJK SC", "Noto Sans CJK JP", sans-serif; fill: #33414f; paint-order: stroke; stroke: #ffffff; stroke-width: 4px; stroke-linejoin: round; }
+      .note { font: 13px "Noto Sans CJK SC", "Noto Sans CJK JP", sans-serif; fill: #4a3b6a; }
+      .legend { font: 11px "Noto Sans CJK SC", "Noto Sans CJK JP", sans-serif; fill: #4a5a6a; }
+    </style>
+  </defs>
+
+  <rect x="0" y="0" width="1600" height="900" fill="#ffffff"/>
+
+  <text class="title" x="40" y="42">SPR_Drone_27 数据流（v0.3）</text>
+  <text class="subtitle" x="40" y="62">实线 = 数据/命令；虚线 = 仲裁/诊断。话题命名空间为 /spr/...，消息类型为 Drone_interfaces/...</text>
+
+  <!-- 感知与估计 -->
+  <rect x="40" y="80" width="800" height="280" rx="14" fill="#f8fbfd" stroke="#d5e0e8" stroke-dasharray="6 4"/>
+  <text class="group-label" x="56" y="104">感知与估计</text>
+
+  <rect x="60" y="130" width="180" height="70" rx="10" fill="#eef4fb" stroke="#7aa7c7"/>
+  <text class="box-title" x="150" y="158" text-anchor="middle">D435i IR1/IR2</text>
+  <text class="box-sub" x="150" y="178" text-anchor="middle">Y8 848×480@30</text>
+
+  <rect x="290" y="130" width="200" height="70" rx="10" fill="#eef4fb" stroke="#7aa7c7"/>
+  <text class="box-title" x="390" y="162" text-anchor="middle">realsense2_camera</text>
+  <text class="box-sub" x="390" y="182" text-anchor="middle">IR1 / IR2</text>
+
+  <rect x="560" y="110" width="220" height="110" rx="10" fill="#eaf7ee" stroke="#6aa57a"/>
+  <text class="box-title" x="670" y="150" text-anchor="middle">vio</text>
+  <text class="box-sub" x="670" y="172" text-anchor="middle">OpenVINS</text>
+  <text class="box-sub" x="670" y="194" text-anchor="middle">双目 VIO</text>
+
+  <rect x="60" y="290" width="180" height="60" rx="10" fill="#fff4e6" stroke="#d19a5a"/>
+  <text class="box-title" x="150" y="316" text-anchor="middle">PX4 飞控 IMU</text>
+  <text class="box-sub" x="150" y="336" text-anchor="middle">SensorCombined</text>
+
+  <!-- 状态融合 -->
+  <rect x="860" y="80" width="700" height="470" rx="14" fill="#f7fbf8" stroke="#cadfd0" stroke-dasharray="6 4"/>
+  <text class="group-label" x="876" y="104">PX4 桥接与状态融合</text>
+
+  <rect x="900" y="190" width="240" height="180" rx="10" fill="#e8f4f3" stroke="#4f9a94"/>
+  <text class="box-title" x="1020" y="232" text-anchor="middle">px4_bridge</text>
+  <text class="box-sub" x="1020" y="254" text-anchor="middle">uXRCE-DDS</text>
+  <text class="box-sub" x="1020" y="274" text-anchor="middle">时间 / 坐标转换</text>
+  <text class="box-sub" x="1020" y="294" text-anchor="middle">唯一 PX4 控制消息发布者</text>
+
+  <rect x="1220" y="110" width="220" height="80" rx="10" fill="#fff4e6" stroke="#d19a5a"/>
+  <text class="box-title" x="1330" y="140" text-anchor="middle">PX4 EKF2</text>
+  <text class="box-sub" x="1330" y="162" text-anchor="middle">外部视觉融合（EV）</text>
+
+  <rect x="1220" y="230" width="220" height="80" rx="10" fill="#fff4e6" stroke="#d19a5a"/>
+  <text class="box-title" x="1330" y="260" text-anchor="middle">PX4 offboard</text>
+  <text class="box-sub" x="1330" y="282" text-anchor="middle">位置 / 航点控制</text>
+
+  <rect x="1220" y="370" width="220" height="90" rx="10" fill="#eaf7ee" stroke="#6aa57a"/>
+  <text class="box-title" x="1330" y="402" text-anchor="middle">state</text>
+  <text class="box-sub" x="1330" y="424" text-anchor="middle">状态仲裁 / ENU·FLU</text>
+  <text class="box-sub" x="1330" y="444" text-anchor="middle">T_world_vio 锚定</text>
+
+  <!-- 规划与控制 -->
+  <rect x="860" y="570" width="700" height="160" rx="14" fill="#f7f9fd" stroke="#ccd6e4" stroke-dasharray="6 4"/>
+  <text class="group-label" x="876" y="594">规划与控制</text>
+
+  <rect x="1220" y="590" width="220" height="80" rx="10" fill="#edf1f8" stroke="#7f93ad"/>
+  <text class="box-title" x="1330" y="622" text-anchor="middle">planning / decision</text>
+  <text class="box-sub" x="1330" y="644" text-anchor="middle">航点 / 轨迹 / 任务</text>
+
+  <rect x="900" y="600" width="240" height="90" rx="10" fill="#edf1f8" stroke="#7f93ad"/>
+  <text class="box-title" x="1020" y="632" text-anchor="middle">flight_control</text>
+  <text class="box-sub" x="1020" y="654" text-anchor="middle">watchdog / geofence</text>
+  <text class="box-sub" x="1020" y="674" text-anchor="middle">failsafe</text>
+
+  <!-- 诊断 -->
+  <rect x="60" y="780" width="1480" height="80" rx="12" fill="#f5f0ff" stroke="#9b8ac4" stroke-dasharray="7 5"/>
+  <text class="note" x="80" y="812">诊断：所有运行时节点 → /spr/diagnostics + events.jsonl + metrics.csv</text>
+  <text class="note" x="80" y="836">由 diagnostics 包汇总；空采集/空运行必须标记 FAILED，不能标记成功。</text>
+
+  <!-- Edges -->
+  <g fill="none" stroke="#5b6b7a" stroke-width="1.6">
+    <path d="M240,165 L290,165" marker-end="url(#arrow)"/>
+    <path d="M390,200 L390,235 L670,235 L670,220" marker-end="url(#arrow)"/>
+    <path d="M240,320 L900,320" marker-end="url(#arrow)"/>
+    <path d="M900,260 L840,260 L840,200 L780,200" marker-end="url(#arrow)"/>
+    <path d="M780,150 L840,150 L840,190 L900,190" marker-end="url(#arrow)"/>
+    <path d="M1020,190 L1020,150 L1220,150" marker-end="url(#arrow)"/>
+    <path d="M1330,190 L1330,225 L1140,225" marker-end="url(#arrow)"/>
+    <path d="M1140,300 L1180,300 L1180,270 L1220,270" marker-end="url(#arrow)"/>
+    <path d="M1100,370 L1100,430 L1220,430" marker-end="url(#arrow)"/>
+    <path d="M1330,460 L1330,590" marker-end="url(#arrow)"/>
+    <path d="M1220,630 L1180,630 L1180,640 L1140,640" marker-end="url(#arrow)"/>
+    <path d="M1020,600 L1020,370" marker-end="url(#arrow)"/>
+  </g>
+
+  <!-- Arbitration edge -->
+  <path d="M670,220 L670,740 L1500,740 L1500,440 L1440,440" fill="none" stroke="#7f93ad" stroke-width="1.5" stroke-dasharray="7 5" marker-end="url(#arrow-dashed)"/>
+
+  <!-- Edge labels -->
+  <text class="edge-label" x="265" y="155" text-anchor="middle">IR1/IR2</text>
+  <text class="edge-label" x="530" y="228" text-anchor="middle">/camera/infra1|2/image_rect_raw</text>
+  <text class="edge-label" x="570" y="310" text-anchor="middle">uXRCE-DDS / SensorCombined</text>
+  <text class="edge-label" x="858" y="250" text-anchor="middle">/spr/imu</text>
+  <text class="edge-label-small" x="858" y="132" text-anchor="middle">/spr/vio/odometry</text>
+  <text class="edge-label-small" x="858" y="145" text-anchor="middle">(vio_odom)</text>
+  <text class="edge-label-small" x="1130" y="140" text-anchor="middle">/fmu/in/vehicle_odometry</text>
+  <text class="edge-label-small" x="1235" y="215" text-anchor="middle">/fmu/out/vehicle_local_position</text>
+  <text class="edge-label-small" x="1170" y="250" text-anchor="middle">OffboardControlMode /</text>
+  <text class="edge-label-small" x="1170" y="262" text-anchor="middle">TrajectorySetpoint</text>
+  <text class="edge-label-small" x="1160" y="420" text-anchor="middle">/spr/px4/local_position</text>
+  <text class="edge-label-small" x="1348" y="520" text-anchor="start">/spr/state/odometry</text>
+  <text class="edge-label-small" x="1348" y="533" text-anchor="start">(ENU/FLU)</text>
+  <text class="edge-label-small" x="1180" y="620" text-anchor="middle">/spr/planning/trajectory</text>
+  <text class="edge-label-small" x="1032" y="500" text-anchor="start">/spr/flight/setpoint</text>
+  <text class="edge-label-small" x="1040" y="755" text-anchor="middle">仲裁输入（VIO 是 EV 输入，非独立备份）</text>
+</svg>

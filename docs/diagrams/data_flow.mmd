@@ -1,0 +1,50 @@
+flowchart LR
+  subgraph SENS["感知与估计"]
+    CAM["D435i IR1/IR2<br/>Y8 848×480@30"]
+    RS["realsense2_camera"]
+    VIO["vio<br/>(OpenVINS)"]
+    IMU["PX4 飞控 IMU<br/>SensorCombined"]
+  end
+
+  subgraph FUSE["PX4 桥接与状态融合"]
+    BR["px4_bridge<br/>uXRCE-DDS / 时间 / 坐标"]
+    EKF["PX4 EKF2<br/>外部视觉融合"]
+    ST["state<br/>状态仲裁 / ENU·FLU"]
+  end
+
+  subgraph CTRL["规划与控制"]
+    PLAN["planning / decision"]
+    FC["flight_control<br/>watchdog / geofence / failsafe"]
+    OFF["PX4 offboard<br/>位置 / 航点控制"]
+  end
+
+  subgraph DIAG["诊断"]
+    D["所有运行时节点<br/>→ /spr/diagnostics<br/>+ events.jsonl<br/>+ metrics.csv"]
+  end
+
+  CAM -->|"IR1/IR2"| RS
+  RS -->|"/camera/infra1#124;2/image_rect_raw"| VIO
+  IMU -->|"uXRCE-DDS"| BR
+  BR -->|"/spr/imu"| VIO
+  VIO -->|"/spr/vio/odometry<br/>(vio_odom)"| BR
+  BR -->|"/fmu/in/vehicle_odometry"| EKF
+  EKF -->|"/fmu/out/vehicle_local_position"| BR
+  BR -->|"/spr/px4/local_position"| ST
+  VIO -.->|"仲裁输入<br/>VIO 是 EV 输入，非独立备份"| ST
+  ST -->|"/spr/state/odometry<br/>(ENU/FLU)"| PLAN
+  PLAN -->|"/spr/planning/trajectory"| FC
+  FC -->|"/spr/flight/setpoint"| BR
+  BR -->|"OffboardControlMode /<br/>TrajectorySetpoint"| OFF
+
+  classDef sensor fill:#eef4fb,stroke:#7aa7c7,color:#1f2d3a
+  classDef vio fill:#eaf7ee,stroke:#6aa57a,color:#1f2d3a
+  classDef bridge fill:#e8f4f3,stroke:#4f9a94,color:#1f2d3a
+  classDef px4 fill:#fff4e6,stroke:#d19a5a,color:#1f2d3a
+  classDef ctrl fill:#edf1f8,stroke:#7f93ad,color:#1f2d3a
+  classDef diag fill:#f5f0ff,stroke:#9b8ac4,color:#4a3b6a
+  class CAM,RS sensor
+  class VIO,ST vio
+  class BR bridge
+  class EKF,OFF px4
+  class PLAN,FC ctrl
+  class D diag
