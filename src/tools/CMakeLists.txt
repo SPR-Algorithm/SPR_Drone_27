@@ -1,0 +1,5 @@
+cmake_minimum_required(VERSION 3.16)
+project(tools)
+find_package(ament_cmake REQUIRED)
+install(PROGRAMS scripts/spr DESTINATION lib/${PROJECT_NAME})
+ament_package()

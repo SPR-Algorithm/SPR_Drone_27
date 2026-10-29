@@ -1,0 +1,49 @@
+schema_version: 1
+rig_id: d435i_px4_bench
+camera:
+  serial_no: "044322070753"
+  usb_serial_no: "043323052893"
+  profile: "848x480x30"
+  stream_mode: rectified
+  driver_version: "4.58.4"
+  exposure: 16000
+  gain: 32
+  enable_auto_exposure: false
+  left_image_topic: /camera/infra1/image_rect_raw
+  right_image_topic: /camera/infra2/image_rect_raw
+  left_info_topic: /camera/infra1/camera_info
+  right_info_topic: /camera/infra2/camera_info
+  min_rate_hz: 27.0
+  max_gap_s: 0.15
+  pair_tolerance_s: 0.001
+imu:
+  source: px4_bridge
+  topic: /spr/imu
+  frame_id: imu_link
+  time_domain: host_ros
+  min_rate_hz: 200.0
+  max_gap_s: 0.02
+agent:
+  executable: "~/.local/opt/spr-microxrce-agent/2.4.3/bin/MicroXRCEAgent"
+  serial_port: /dev/serial/by-id/usb-MicoAir_MicoAir743v2_0-if00
+  baudrate: 921600
+board:
+  cols: 8
+  rows: 11
+  square_m: 0.025
+capture:
+  min_pairs: 30
+  show_ui: false
+  auto_save: true
+  blur_threshold: 100.0
+  edge_margin: 15.0
+  diversity_translation: 0.03
+  diversity_rotation_deg: 8.0
+  save_cooldown: 0.5
+  detect_rate_hz: 10.0
+  exhaustive_detection: false
+record:
+  min_free_gb: 5.0
+  storage_id: sqlite3
+  preflight_s: 5.0
+  startup_timeout_s: 25.0

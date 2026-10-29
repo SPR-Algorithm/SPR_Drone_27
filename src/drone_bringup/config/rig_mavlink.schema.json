@@ -1,0 +1,279 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "rig_id",
+    "camera",
+    "imu",
+    "board",
+    "capture",
+    "record",
+    "mavlink",
+    "calibration_profile"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "rig_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "camera": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "serial_no",
+        "profile",
+        "stream_mode",
+        "driver_version",
+        "exposure",
+        "gain",
+        "enable_auto_exposure",
+        "left_image_topic",
+        "right_image_topic",
+        "left_info_topic",
+        "right_info_topic",
+        "min_rate_hz",
+        "max_gap_s",
+        "pair_tolerance_s",
+        "usb_serial_no"
+      ],
+      "properties": {
+        "serial_no": {
+          "type": "string",
+          "pattern": "^[0-9]+$"
+        },
+        "profile": {
+          "type": "string",
+          "pattern": "^[0-9]+x[0-9]+x[0-9]+$"
+        },
+        "stream_mode": {
+          "const": "rectified"
+        },
+        "driver_version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "exposure": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "gain": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "enable_auto_exposure": {
+          "const": false
+        },
+        "left_image_topic": {
+          "type": "string",
+          "pattern": "^/[^ ]+$"
+        },
+        "right_image_topic": {
+          "type": "string",
+          "pattern": "^/[^ ]+$"
+        },
+        "left_info_topic": {
+          "type": "string",
+          "pattern": "^/[^ ]+$"
+        },
+        "right_info_topic": {
+          "type": "string",
+          "pattern": "^/[^ ]+$"
+        },
+        "min_rate_hz": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "max_gap_s": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "pair_tolerance_s": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "usb_serial_no": {
+          "type": "string",
+          "pattern": "^[0-9]+$"
+        }
+      }
+    },
+    "imu": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source",
+        "topic",
+        "frame_id",
+        "time_domain",
+        "min_rate_hz",
+        "max_gap_s"
+      ],
+      "properties": {
+        "source": {
+          "const": "mavlink_highres_imu"
+        },
+        "topic": {
+          "const": "/spr/calibration/imu"
+        },
+        "frame_id": {
+          "const": "imu_link"
+        },
+        "time_domain": {
+          "const": "host_ros"
+        },
+        "min_rate_hz": {
+          "const": 140.0
+        },
+        "max_gap_s": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        }
+      }
+    },
+    "board": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "cols",
+        "rows",
+        "square_m"
+      ],
+      "properties": {
+        "cols": {
+          "const": 8
+        },
+        "rows": {
+          "const": 11
+        },
+        "square_m": {
+          "const": 0.025
+        }
+      }
+    },
+    "capture": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "min_pairs",
+        "show_ui",
+        "auto_save",
+        "blur_threshold",
+        "edge_margin",
+        "diversity_translation",
+        "diversity_rotation_deg",
+        "save_cooldown",
+        "detect_rate_hz",
+        "exhaustive_detection"
+      ],
+      "properties": {
+        "min_pairs": {
+          "type": "integer",
+          "minimum": 30
+        },
+        "show_ui": {
+          "type": "boolean"
+        },
+        "auto_save": {
+          "type": "boolean"
+        },
+        "blur_threshold": {
+          "type": "number",
+          "minimum": 0
+        },
+        "edge_margin": {
+          "type": "number",
+          "minimum": 0
+        },
+        "diversity_translation": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "diversity_rotation_deg": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "save_cooldown": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "detect_rate_hz": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "exhaustive_detection": {
+          "type": "boolean"
+        }
+      }
+    },
+    "record": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "min_free_gb",
+        "storage_id",
+        "preflight_s",
+        "startup_timeout_s"
+      ],
+      "properties": {
+        "min_free_gb": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "storage_id": {
+          "const": "sqlite3"
+        },
+        "preflight_s": {
+          "type": "number",
+          "minimum": 2
+        },
+        "startup_timeout_s": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        }
+      }
+    },
+    "calibration_profile": {
+      "const": "mavlink_calibration"
+    },
+    "mavlink": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "serial_port",
+        "baudrate",
+        "requested_rate_hz",
+        "sync_min_samples",
+        "sync_max_uncertainty_us"
+      ],
+      "properties": {
+        "serial_port": {
+          "type": "string",
+          "pattern": "^/dev/serial/by-id/"
+        },
+        "baudrate": {
+          "type": "integer",
+          "minimum": 9600
+        },
+        "requested_rate_hz": {
+          "type": "number",
+          "minimum": 140.0,
+          "maximum": 1000.0
+        },
+        "sync_min_samples": {
+          "type": "integer",
+          "minimum": 20
+        },
+        "sync_max_uncertainty_us": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 1000.0
+        }
+      }
+    }
+  }
+}

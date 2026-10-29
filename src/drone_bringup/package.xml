@@ -1,0 +1,21 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>drone_bringup</name><version>0.1.0</version>
+  <description>Single device owner and calibration run supervisor</description>
+  <maintainer email="silverwolf@example.com">SilverWolf</maintainer><license>MIT</license>
+  <buildtool_depend>ament_cmake</buildtool_depend>
+  <buildtool_depend>ament_cmake_python</buildtool_depend>
+  <exec_depend>rclpy</exec_depend>
+  <exec_depend>sensor_msgs</exec_depend>
+  <exec_depend>diagnostic_msgs</exec_depend>
+  <exec_depend>rcl_interfaces</exec_depend>
+  <exec_depend>realsense2_camera</exec_depend>
+  <exec_depend>rosbag2_transport</exec_depend>
+  <exec_depend>rosbag2_storage_sqlite3</exec_depend>
+  <exec_depend>diagnostics</exec_depend>
+  <exec_depend>python3-yaml</exec_depend>
+  <exec_depend>python3-jsonschema</exec_depend>
+  <exec_depend>ament_index_python</exec_depend>
+  <test_depend>ament_cmake_pytest</test_depend>
+  <export><build_type>ament_cmake</build_type></export>
+</package>

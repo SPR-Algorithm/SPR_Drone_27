@@ -1,0 +1,12 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>tools</name><version>0.1.0</version>
+  <description>SPR command line entrypoints</description>
+  <maintainer email="silverwolf@example.com">SilverWolf</maintainer><license>MIT</license>
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <exec_depend>drone_bringup</exec_depend>
+  <exec_depend>calibration</exec_depend>
+  <test_depend>ament_cmake_pytest</test_depend>
+  <export><build_type>ament_cmake</build_type></export>
+</package>
