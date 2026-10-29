@@ -1,0 +1,11 @@
+cmake_minimum_required(VERSION 3.16)
+project(diagnostics)
+find_package(ament_cmake REQUIRED)
+find_package(ament_cmake_python REQUIRED)
+ament_python_install_package(spr_diagnostics)
+
+if(BUILD_TESTING)
+  find_package(ament_cmake_pytest REQUIRED)
+  ament_add_pytest_test(test_run test/test_run.py APPEND_ENV PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR})
+endif()
+ament_package()
