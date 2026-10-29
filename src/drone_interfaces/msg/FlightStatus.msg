@@ -1,0 +1,14 @@
+std_msgs/Header header
+uint8 IDLE=0
+uint8 TAKEOFF=1
+uint8 HOLD=2
+uint8 GOTO=3
+uint8 LAND=4
+uint8 ABORT=5
+uint8 mode
+bool armed
+bool failsafe
+bool ekf_ev_healthy
+float32 battery_voltage
+float32 setpoint_age_ms
+string message
