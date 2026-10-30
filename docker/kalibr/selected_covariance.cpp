@@ -12,13 +12,18 @@ namespace python = boost::python;
 class FullHessianSolver : public sparse_block_matrix::LinearSolverCholmod<Eigen::MatrixXd> {
  public:
   Eigen::MatrixXd SolveColumns(const BlockMatrix& hessian, Eigen::MatrixXd& basis) {
+    // Simplicial LDL' can successfully factor negative pivots. Require LL'
+    // so an indefinite nuisance direction cannot escape a selected-block check.
+    _cholmodCommon.final_asis = 0;
+    _cholmodCommon.final_ll = 1;
     fillCholmodExt(hessian, false);
     computeSymbolicDecomposition(hessian);
     if (_cholmodFactor == nullptr || _cholmodCommon.status != CHOLMOD_OK) {
       throw std::runtime_error("Full Hessian symbolic factorization failed");
     }
     if (!cholmod_factorize(_cholmodSparse, _cholmodFactor, &_cholmodCommon) ||
-        _cholmodCommon.status != CHOLMOD_OK || _cholmodFactor->minor != _cholmodSparse->nrow) {
+        _cholmodCommon.status != CHOLMOD_OK || !_cholmodFactor->is_ll ||
+        _cholmodFactor->minor != _cholmodSparse->nrow) {
       throw std::runtime_error("Full Hessian is not positive definite; covariance is unavailable");
     }
     cholmod_dense rhs{};

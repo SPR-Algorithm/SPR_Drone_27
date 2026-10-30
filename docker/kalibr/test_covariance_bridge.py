@@ -39,6 +39,11 @@ class MarginalCovarianceTests(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             marginal_covariance(singular, [0])
 
+    def test_negative_nuisance_direction_is_rejected_even_when_selected_inverse_is_positive(self):
+        indefinite = block_matrix(np.diag([1., -1.]), [1, 2])
+        with self.assertRaises(RuntimeError):
+            marginal_covariance(indefinite, [0])
+
     def test_invalid_or_duplicate_block_requests_are_rejected(self):
         for indices in ([], [3], [-1], [0, 0], [True]):
             with self.subTest(indices=indices), self.assertRaises(Exception):

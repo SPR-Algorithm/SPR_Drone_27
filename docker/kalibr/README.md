@@ -22,8 +22,9 @@ docker image inspect spr-kalibr-cholmod:local --format '{{.Id}}'
 Dockerfile 固定已存在的本地基镜像 ID，并验证源 commit；依赖原镜像中的构建缓存。
 它不是干净机器上的完整容器构建方案。构建无网络，不安装包、不下载源码，
 不修改宿主机或 OpenVINS 子模块。新镜像用独立标签保存，保留原镜像和失败日志。
-构建中的全新 Python 进程实际导入 bsplines 与 IMU—相机求解器；另有五个纯矩阵
-回归检查边缘化、参数顺序、奇异拒绝及实际 73420 维稀疏矩阵的边界行为，不生成传感器数据。
+构建中的全新 Python 进程实际导入 bsplines 与 IMU—相机求解器；另有六个纯矩阵
+回归检查边缘化、参数顺序、奇异/负干扰方向拒绝及实际 73420 维稀疏矩阵的边界行为，
+不生成传感器数据。分解强制采用 LL′，不将允许负枢轴的 LDL′ 成功状态当作完整 Hessian 正定证明。
 
 联合求解显式选择 `--image spr-kalibr-cholmod:local`；工具继续将标签解析成
 不可变 image ID，保存实际 Kalibr commit、命令和输入哈希。补丁不改变优化模型、
