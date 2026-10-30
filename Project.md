@@ -7,6 +7,8 @@
 
 > **当前实施覆盖（2026-10-29，用户明确指定）：** 先使用 MAVLink 完成 IMU—相机标定测试，当前接受实测 ≥140 Hz；DDS 部分冻结，禁止执行暂存的切换脚本、改动 DDS 配置或固件。该阶段使用独立 `mavlink_calibration` profile 与 `/spr/calibration/imu`，不能声明原 DDS ≥200 Hz 运行时验收通过。其余标定质量与真实数据要求保留。见 [ADR 0002](docs/adr/0002-mavlink-calibration-phase.md)。
 
+> **测试数据约定（2026-10-30）：** 根据用户“别用合成数据”的指令，REQ-CAL-010 使用真实采集回归；不执行生成棋盘或合成标定自检。见 [ADR 0004](docs/adr/0004-real-calibration-regressions.md)。
+
 ---
 
 ## 0. 文档约定
@@ -577,7 +579,7 @@ calibrations/<calib_id>/
 | REQ-CAL-007 | **必须**导出 OpenVINS 配置：`max_cameras: 2`、`use_stereo: true`、radtan 4、`timeshift_cam_imu` | 回放 smoke 通过；配置 schema 校验 | A0 | 框架 |
 | REQ-CAL-008 | **必须**保证标定与运行时一致：分辨率、流模式（rectified/raw）、曝光、驱动版本、**IMU 话题/frame/时间域/bridge 版本** | 启动预检比对 `camera_info`/分辨率/驱动参数/IMU 通路；不一致拒飞 | A0 | 框架 |
 | REQ-CAL-009 | **必须**在正式相机/IMU 标定时关闭自动曝光/自动增益，记录曝光参数 | bag/manifest 中有曝光值；重复标定可复现 | A0 | 框架 |
-| REQ-CAL-010 | **必须**有自动化测试：合成数据自检 + 标定导出/符号测试进 CI | `--self-test` 和导出器测试在 CI 通过 | A0 | 框架 |
+| REQ-CAL-010 | **必须**有自动化测试：真实采集的棋盘检测/求解/导出回归，以及变换/时间符号测试进 CI；不生成合成标定数据 | 显式指定真实输入的回归通过；缺失输入明确跳过，不作为硬件验收通过 | A0 | 框架 |
 | REQ-CAL-011 | **必须**在 A0 使用与 A1 运行时相同的 `px4_bridge` 产生 `/spr/imu`；禁止用 MAVROS/驱动内置 IMU 生成正式标定数据 | 标定 bag 的 IMU 话题来自 bridge；manifest 记录 bridge commit 与 `T_host_px4` 偏移 | A0 | 框架 |
 | REQ-CAL-012 | **必须**记录并验证 IMU 机械安装/轴向/振动/温度/量程；静止 Allan 不能代表飞行 | 安装矩阵/量程进 rig；悬停振动测试；温漂与饱和检查 | A0–A2 | 硬件/框架 |
 
