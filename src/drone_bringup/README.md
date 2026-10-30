@@ -1,21 +1,33 @@
 # drone_bringup
-Owner: SilverWolf. Sole device-process owner for bench calibration.
-Configuration: config/rig/d435i.yaml, validated against rig.schema.json.
-The SDK and USB serial numbers differ on this camera; both are required.
+Owner: SilverWolf。台架标定的唯一设备入口。
+当前默认 profile 为 `mavlink_calibration`，配置位于
+`config/rig/d435i_mavlink.yaml`，由 `config/rig_mavlink.schema.json` 校验。
+相机 SDK 序列号与 USB 描述符序列号不同，两者均需记录。
+
+先完成根工作区构建、加载 overlay，并按 [环境说明](../../docs/environment.md)
+配置 `SPR_MAVLINK_PYTHONPATH`。连接设备并释放 QGC/MAVROS 的串口占用后采集：
 
 ```bash
-ros2 run tools spr check-rig
-ros2 run tools spr record --mode stereo --duration 120 --experimental --show-ui
-ros2 run tools spr record --mode joint --duration 120
-ros2 run tools spr record --mode allan --duration 3700
+ros2 run tools spr check-rig --profile mavlink_calibration
+ros2 run tools spr record --profile mavlink_calibration --mode imu --duration 20
+ros2 run tools spr record --profile mavlink_calibration --mode stereo --duration 180 --show-ui
+ros2 run tools spr record --profile mavlink_calibration --mode allan --duration 3700
+ros2 run tools spr record --profile mavlink_calibration --mode joint --duration 180
 ```
 
-stereo records IR/camera_info and derived checkerboard PNGs; joint also runs
-MicroXRCEAgent and px4_bridge and records /spr/imu plus diagnostics; allan records
-IMU only. camera mode records IR without board-gated PNG capture.
-Formal runs require an initial Git baseline, real DDS time/rate preflight and
-disk space. --experimental allows diagnostic capture but never bypasses final
-quality failure status. Capture preview is opt-in.
+`imu` 检查短时 IMU/时间质量；`allan` 录制静止 IMU，至少一小时才可作为正式噪声分析。
+`stereo` 保存 IR、camera_info 和通过清晰度/覆盖门限的派生 PNG。
+`joint` 记录双目、camera_info、`/spr/calibration/imu` 与 `/spr/diagnostics`；
+固定棋盘，整体移动刚性连接的相机与飞控。运动录包不套用静态双目标定的覆盖率门限。
+`--save-board-images --show-ui` 可为 joint 添加棋盘预览及 PNG sidecar。
+
+当前由 `calibration_mavlink_imu` 独占 USB，读取 HIGHRES_IMU，以 TIMESYNC
+测量仿射时钟映射。实测频率门限为 140 Hz；请求频率和 ACK 不能代替实测。
+正式采集仍需可复现代码基线、预检和磁盘空间；`--experimental` 用于诊断，不能把失败会话标成通过。
+
+详细采集语义见 [README.mavlink.md](README.mavlink.md)，端到端步骤见
+[联合标定流程](../../docs/joint-calibration.md)。DDS 配置、Agent、`px4_bridge`
+保持冻结，不由当前 profile 启动；迁移安排见 [ADR 0002](../../docs/adr/0002-mavlink-calibration-phase.md)。
 
 Start hardware only here; calibration launch is subscriber-only. Cooperative
 per-device flock and serial-open checks reject duplicates without killing them.
@@ -26,6 +38,6 @@ in reverse order. SIGINT finalizes the bag. Insufficient pairs/coverage and
 empty bags produce FAILED manifests. Logs are local under runs/<run_id>/.
 
 Output camera topics are Project.md §5.1, reliable, subscribers depth5 (driver
-DEFAULT preset depth10); IMU best_effort depth100, frame imu_link. Driver TF is
+DEFAULT preset depth10); IMU is /spr/calibration/imu, best_effort, frame imu_link. Driver TF is
 disabled; no artificial static camera-IMU transform is published.
 This bench entrypoint does not arm or publish PX4 control commands.
