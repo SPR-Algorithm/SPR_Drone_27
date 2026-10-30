@@ -166,6 +166,8 @@ ros2 run calibration joint_calibrate.py export \
 
 `runs/20261030T111102_8c748ce8/` 保存训练包的无损 ROS1 转换、相机/棋盘配置、原采集 manifest 副本，以及重新读取真实留出包的检查。`training_conversion.yaml` 比较全部选定消息的数量、记录/header 时间戳、像素和 IMU 载荷哈希；原始 ROS2 包保留。该目录仅是离线输入准备，没有噪声参数或联合标定结果。以后调用当前 `solve` 包装器时仍传入**原始 ROS2 bag**及其原 manifest：包装器自行转换，直接传预转换包会因采集输入哈希不同而失去原始血缘。
 
-当前缺少实测噪声、Kalibr 联合求解、数值留出检验及 OpenVINS 回放证据，尚未达到联合标定验收。上述生成数据由 Git 忽略，其他开发机须取得原始归档；相机节点的已测启动环境见 [environment.md](environment.md)。
+当前已按 ADR 0005 在训练 run 的 `noise_prior_01/` 显式声明工程先验，不再要求追加完整 Allan。`solve_noise_prior_03/` 的实际 Kalibr 从左右各 5421 幅图像分别提取 2345/2343 幅棋盘观测并完成数值优化，但完整无阻尼 Hessian 的协方差恢复未通过正定性检查，故 run 保持 `FAILED`。`pre_covariance_camchain.yaml` 仅是优化后诊断快照，不能作为已验收配置；`provisional_heldout_01/` 对该快照的独立录包检查同样仅用于诊断。
+
+当前仍缺少通过协方差与数值留出检查的联合候选，以及 OpenVINS 实际回放证据，尚未达到联合标定验收。上述生成数据由 Git 忽略，其他开发机须取得原始归档；相机节点的已测启动环境见 [environment.md](environment.md)。
 
 依据：[Kalibr YAML 约定](https://github.com/ethz-asl/kalibr/wiki/Yaml-formats)、[IMU 噪声模型](https://github.com/ethz-asl/kalibr/wiki/IMU-Noise-Model)、[相机—IMU 标定](https://github.com/ethz-asl/kalibr/wiki/camera-imu-calibration)。
