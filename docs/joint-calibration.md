@@ -49,6 +49,8 @@ ros2 run tools spr record --profile mavlink_calibration --mode joint --duration 
 
 MAVLink `allan` 模式在预检及录制中使用与离线分析相同的采样间隔门槛：至少 100 个实际时间戳，最大间隔 ≤1.5 倍中位周期，p99 绝对抖动 ≤10% 中位周期。实测平均频率 ≥140 Hz 仍可能不满足这些要求；不要录满一小时后才检查，也不要通过补点或重采样使数据通过。`joint`/`imu` 模式保留各自频率与连续性检查，运动标定可先行录制；采样检查通过也不等于已证明静止时长、噪声或联合标定有效。
 
+静止 **≥1 h** 是 [REQ-CAL-003](../Project.md) 的本地验收下限，不是相机—IMU 运动录制时长，也不保证一定能拟合出零偏随机游走。[Kalibr 官方噪声模型说明](https://github.com/ethz-asl/kalibr/wiki/IMU-Noise-Model) 对完整静止噪声表征建议约 15–24 h；最终仍需检查实际 Allan 曲线的白噪声与随机游走区域。短时静止数据可用于初步检查，不能直接填齐未经测量的噪声参数。`allan` 模式只启动 IMU 通路，不启动相机；当前按用户安排暂缓噪声测试，运动数据的识别与格式转换可独立进行。
+
 正式采集要求可复现且已提交的 Git 基线。`git.effective_clean` 只允许一条例外：根仓库其余部分干净，OpenVINS gitlink/HEAD 固定在约定基线，实际 diff、两个补丁和六个修改文件的哈希全部与 [兼容补丁](../docker/openvins/README.md) 一致；任何其他修改、暂存或未跟踪文件仍然拒绝。manifest 保留原始 Git status 和 `approved_patches`，不会隐去补丁状态。源码调试可显式使用 `--experimental`；旧数据不会在提交后被追认为正式采集。MAVLink 流程要求实际 `mavlink_timesync` 诊断；原 DDS 流程仍要求自己的 DDS 同步证据，不能靠切换 profile 或重命名话题补齐。
 
 每个 run 的 manifest 包含实际完成录包的文件哈希。相机参数在启动后及结束前通过 `/camera/get_parameters` 读回，并与 rig、实际驱动包版本比对；配置请求本身不等于观测证明。飞控记录实际 `timesync_snapshot`、采集程序 commit、频率、样本语义和时钟映射不确定度。MAVLink 采集器已将 header 映射到主机；离线转换保留 header，不再次添加 `T_host_px4`。DDS 时间约定仍见 [time.md](time.md)。
@@ -130,5 +132,18 @@ ros2 run calibration joint_calibrate.py export \
 ## 已有真实数据的转换验证
 
 `runs/offline_conversion_20261029T115739Z/` 保存既有 2026-10-28 录包的转换证据：左右图像各 1821 条，IMU 6078 条，总计 9720 条，转换前后全部语义载荷/时间/数量一致，实际 Noetic `rosbag info` 可读。该旧包的 IMU 来自 MAVROS，仅用于格式回归；约 60.8 秒的数据不足 Allan 门槛，也未证明棋盘或联合标定成功。报告仅归档小型证据，没有复制 1.4 GB 录包。
+
+2026-10-30 使用 D435i 与飞控真实 MAVLink 通路完成两段运动采集，源码基线为 `81cf1a0`，相机为固定曝光的 rectified mono8、848×480@30：
+
+| 用途 | 原始 run | 每路图像数 | IMU 数 / 实测平均频率 |
+| --- | --- | --- | --- |
+| 联合拟合，约 180 s | `runs/20261030T105433_ec6df7ad/` | 5421 | 29734 / 164.53 Hz |
+| 独立留出，约 120 s | `runs/20261030T105859_cb4cfaad/` | 3622 | 19879 / 164.60 Hz |
+
+各 run 的 `selected_topic_inspection.json` 和 `readiness_report.yaml` 保存消息、时间及约 1 Hz 抽样棋盘检查。训练抽样 181 对中 78 对、留出抽样 120 对中 59 对在左右图像均识别到全部 88 个内角点；这不是全部帧的检测率。留出的 `independence_report.yaml` 只证明录制独立性。
+
+`runs/20261030T111102_8c748ce8/` 保存训练包的无损 ROS1 转换、相机/棋盘配置、原采集 manifest 副本，以及重新读取真实留出包的检查。`training_conversion.yaml` 比较全部选定消息的数量、记录/header 时间戳、像素和 IMU 载荷哈希；原始 ROS2 包保留。该目录仅是离线输入准备，没有噪声参数或联合标定结果。以后调用当前 `solve` 包装器时仍传入**原始 ROS2 bag**及其原 manifest：包装器自行转换，直接传预转换包会因采集输入哈希不同而失去原始血缘。
+
+当前缺少实测噪声、Kalibr 联合求解、数值留出检验及 OpenVINS 回放证据，尚未达到联合标定验收。上述生成数据由 Git 忽略，其他开发机须取得原始归档；相机节点的已测启动环境见 [environment.md](environment.md)。
 
 依据：[Kalibr YAML 约定](https://github.com/ethz-asl/kalibr/wiki/Yaml-formats)、[IMU 噪声模型](https://github.com/ethz-asl/kalibr/wiki/IMU-Noise-Model)、[相机—IMU 标定](https://github.com/ethz-asl/kalibr/wiki/camera-imu-calibration)。
