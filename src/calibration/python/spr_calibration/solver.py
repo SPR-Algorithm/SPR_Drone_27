@@ -6,6 +6,7 @@ from pathlib import Path
 import re
 import shutil
 import subprocess
+from time import monotonic
 
 import numpy as np
 
@@ -20,23 +21,31 @@ from .noise import validate_noise_prior
 DEFAULT_KALIBR_IMAGE = "spr-kalibr-cholmod:local"
 
 
-# This adapter adds covariance export to the existing real Kalibr estimator.
-# It does not alter its optimization or measurement model. The covariance is
-# ordered [imu->cam0 rotation(3), translation(3), camera timeshifts(N)].
-COVARIANCE_ENTRY = '''import importlib, runpy, sys
-import numpy as np
-mod = importlib.import_module("kalibr_imu_camera_calibration.IccCalibrator")
-def recover(self):
-    estimator = mod.inc.IncrementalEstimator(mod.CALIBRATION_GROUP_ID)
-    estimator.addBatch(self.problem, True)
-    covariance = np.asarray(estimator.getSigma2Theta())
-    np.save("/data/joint_covariance.npy", covariance)
-    values = np.sqrt(covariance.diagonal())
-    self.std_trafo_ic = np.array(values[0:6])
-    self.std_times = np.array(values[6:])
-mod.IccCalibrator.recoverCovariance = recover
-runpy.run_path("/catkin_ws/src/kalibr/aslam_offline_calibration/kalibr/python/kalibr_calibrate_imu_camera", run_name="__main__")
-'''
+def stream_kalibr_output(lines, log):
+    """Keep the full log; show progress at 1 Hz plus stage/end snapshots."""
+    last_progress_time = None
+    pending_progress = None
+    try:
+        for line in lines:
+            log.write(line)
+            log.flush()
+            if line.lstrip().startswith("Progress "):
+                now = monotonic()
+                if last_progress_time is None or now - last_progress_time >= 1.0:
+                    print(line, end="", flush=True)
+                    last_progress_time = now
+                    pending_progress = None
+                else:
+                    pending_progress = line
+            else:
+                if pending_progress is not None:
+                    print(pending_progress, end="", flush=True)
+                    pending_progress = None
+                print(line, end="", flush=True)
+                last_progress_time = None
+    finally:
+        if pending_progress is not None:
+            print(pending_progress, end="", flush=True)
 
 
 def provenance_errors(manifest, camera_required=True, profile=DEFAULT_PROFILE):
@@ -326,7 +335,7 @@ def solve(bag, camchain, imu, output, image=DEFAULT_KALIBR_IMAGE, session_manife
             actual = conversion["source"]["topics"][chain[name]["rostopic"]]["profile"][:2]
             if actual != chain[name]["resolution"]:
                 raise CalibrationError(f"{name}: bag resolution differs from camera calibration")
-        (output / "kalibr_covariance_entry.py").write_text(COVARIANCE_ENTRY, encoding="utf-8")
+        shutil.copyfile(Path(__file__).with_name("kalibr_covariance.py"), output / "kalibr_covariance_entry.py")
         command = ["docker", "run", "--rm", "--network", "none", "--user", f"{os.getuid()}:{os.getgid()}",
                    "--entrypoint", "/bin/bash", "-e", "MPLBACKEND=Agg", "-e", "HOME=/tmp",
                    "-v", f"{output}:/data", image_id, "-lc",
@@ -339,10 +348,7 @@ def solve(bag, camchain, imu, output, image=DEFAULT_KALIBR_IMAGE, session_manife
         with (output / "kalibr.log").open("w", encoding="utf-8") as log:
             process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
             try:
-                for line in process.stdout:
-                    log.write(line)
-                    log.flush()
-                    print(line, end="", flush=True)
+                stream_kalibr_output(process.stdout, log)
                 returncode = process.wait()
             except BaseException:
                 process.terminate()
@@ -367,7 +373,7 @@ def solve(bag, camchain, imu, output, image=DEFAULT_KALIBR_IMAGE, session_manife
                         completed_utc=utc_now())
         manifest["artifact_sha256"] = {name: sha256_file(output / name) for name in (
             "camchain.yaml", "imu.yaml", "target.yaml", "kalibr_imucam_chain.yaml",
-            "joint_covariance.npy", "uncertainty.yaml", "report.pdf", "conversion.yaml",
+            "joint_covariance.npy", "covariance_method.yaml", "uncertainty.yaml", "report.pdf", "conversion.yaml",
             "command.yaml", "kalibr_covariance_entry.py")}
         if session_manifest:
             manifest["artifact_sha256"]["session_manifest.yaml"] = sha256_file(output / "session_manifest.yaml")

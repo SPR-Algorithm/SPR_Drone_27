@@ -13,5 +13,10 @@ RUN cd /catkin_ws/src/kalibr \
 # A fresh process must import the real numerical backend, not just rosbag.
 RUN /bin/bash -lc 'source /catkin_ws/devel/setup.bash && python3 -c "import bsplines; import kalibr_imu_camera_calibration.IccCalibrator"'
 
+COPY CMakeLists.txt selected_covariance.cpp test_covariance_bridge.py /opt/spr/covariance/
+RUN /bin/bash -lc 'source /catkin_ws/devel/setup.bash && cmake -S /opt/spr/covariance -B /opt/spr/covariance/build -DPython3_EXECUTABLE=/usr/bin/python3 && cmake --build /opt/spr/covariance/build --parallel 2'
+ENV PYTHONPATH=/opt/spr/python
+RUN /bin/bash -lc 'source /catkin_ws/devel/setup.bash && python3 /opt/spr/covariance/test_covariance_bridge.py'
+
 LABEL spr.kalibr.commit="1f60227442d25e36365ef5f72cd80b9666d73467" \
       spr.kalibr.patch="bsplines-cholmod.patch"
