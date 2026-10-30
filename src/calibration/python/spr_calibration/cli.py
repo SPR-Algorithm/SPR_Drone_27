@@ -12,6 +12,7 @@ from .bags import convert_bag, inspect_bag, load_imu
 from .common import (CalibrationError, camera_chain, hash_input, new_output,
                      read_yaml, report_html, sha256_file, tool_versions, write_yaml)
 from .export import prepare_openvins, publish
+from .noise import validate_noise_prior
 from .solver import hardware_equivalence_errors, session_provenance_errors, solve
 from .profiles import (DEFAULT_PROFILE, MAVLINK_PROFILE, PROFILES, profile_annotations,
                        profile_config, require_candidate_profile)
@@ -46,7 +47,10 @@ def parser():
     for option in ("bag", "camchain", "imu", "output"):
         command.add_argument("--" + option, type=Path, required=True)
     command.add_argument("--session-manifest", type=Path)
-    command.add_argument("--allan-report", type=Path, help="Allan report from this tool; required for formal publication")
+    noise_evidence = command.add_mutually_exclusive_group()
+    noise_evidence.add_argument("--allan-report", type=Path, help="Measured Allan report from this tool")
+    noise_evidence.add_argument("--noise-prior", type=Path,
+                                help="Source-attributed engineering prior; MAVLink test phase only, unmeasured")
     command.add_argument("--image", default="rm-nav-kalibr:local", help="Local image; resolved to sha256 before execution")
     command.add_argument("--max-iter", type=int, default=30)
     command = sub.add_parser("validate", help="Independent fixed-target held-out stereo + gyro/accel/time-sign checks")
@@ -95,6 +99,9 @@ def main(argv=None):
                 errors = session_provenance_errors(source_manifest, inspected["input_sha256"], "allan", args.profile)
                 result.update(acquisition_manifest=source_manifest, formal_provenance_errors=errors,
                               formal_eligible=result.get("status") == "PASSED" and result["formal_duration"] and not errors)
+                if result.get("status") == "PASSED":
+                    result.update(noise_basis="measured_allan", noise_model_measured=True,
+                                  original_allan_requirement_satisfied=result["formal_duration"])
             except CalibrationError as error:
                 result = {"status": "FAILED", "error": str(error)}
             write_yaml(output / "allan_report.yaml", result)
@@ -107,6 +114,8 @@ def main(argv=None):
         elif args.command == "solve":
             if args.max_iter < 1:
                 raise CalibrationError("--max-iter must be positive")
+            if args.noise_prior:
+                validate_noise_prior(read_yaml(args.noise_prior), read_yaml(args.imu), args.profile)
             if args.allan_report:
                 measured = read_yaml(args.allan_report)
                 require_candidate_profile(measured, args.profile)
@@ -115,11 +124,13 @@ def main(argv=None):
                 if measured.get("imu") != read_yaml(args.imu):
                     raise CalibrationError("--imu does not match --allan-report measured noise")
             result = solve(args.bag, args.camchain, args.imu, args.output, args.image,
-                           args.session_manifest, args.max_iter, args.profile)
+                           args.session_manifest, args.max_iter, args.profile, noise_prior=args.noise_prior)
             if args.allan_report:
                 shutil.copyfile(args.allan_report, args.output / "allan_report.yaml")
                 result["artifact_sha256"]["allan_report.yaml"] = sha256_file(args.output / "allan_report.yaml")
                 result["formal_provenance_errors"].extend(measured.get("formal_provenance_errors", ["Allan provenance was not recorded"]))
+                result.update(noise_basis="measured_allan", noise_model_measured=True,
+                              original_allan_requirement_satisfied=True)
                 write_yaml(args.output / "manifest.yaml", result)
                 report_html(args.output / "report.html", "Kalibr candidate calibration", result)
         elif args.command == "validate":

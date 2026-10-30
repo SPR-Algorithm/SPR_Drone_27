@@ -15,6 +15,7 @@ from .solver import baseline_provenance_errors, covariance_report, hardware_equi
 from .profiles import DEFAULT_PROFILE, MAVLINK_PROFILE, profile_annotations, profile_config, require_candidate_profile
 from .bags import inspect_bag
 from .validation import validate_stream_independence
+from .noise import validate_noise_prior
 
 
 def _opencv_yaml(path, data):
@@ -48,6 +49,9 @@ def prepare_openvins(candidate, estimator_template, profile=DEFAULT_PROFILE):
     if abs(chain["cam0"]["timeshift_cam_imu"] - chain["cam1"]["timeshift_cam_imu"]) > 0.001:
         raise CalibrationError("OpenVINS has one stereo time offset; cam0/cam1 differ by >1 ms")
     noise = imu_config(read_yaml(candidate / "imu.yaml"), profile)
+    noise_annotations = {}
+    if manifest.get("noise_basis") == "engineering_prior":
+        _, noise_annotations = validate_candidate_noise(candidate, manifest, profile)
     template_text = Path(estimator_template).read_text(encoding="utf-8")
     # This is the intentional final OpenCV dialect boundary.
     template = yaml.safe_load("\n".join(line for line in template_text.splitlines() if not line.startswith("%YAML:")))
@@ -77,6 +81,7 @@ def prepare_openvins(candidate, estimator_template, profile=DEFAULT_PROFILE):
         write_yaml(candidate / "openvins_export.yaml", {
             "status": "CANDIDATE_REPLAY_INPUT", "result_sha256": sha256_file(chain_path),
             **profile_annotations(profile),
+            **noise_annotations,
             "deployment_scope": manifest.get("deployment_scope", "dds_runtime"),
             "template_sha256": sha256_file(estimator_template), "files": files,
             "config_sha256": hash_input(output), "created_utc": utc_now(),
@@ -181,6 +186,41 @@ def validate_replay_evidence(evidence, expected_config_hash, training_hash, base
     return resolved
 
 
+def validate_candidate_noise(candidate, manifest, profile=DEFAULT_PROFILE):
+    """Verify measured Allan evidence or an explicit MAVLink-only model prior.
+
+    The latter validates declaration and integrity, never a noise measurement.
+    Its flags remain visible in replay inputs and published test artifacts.
+    """
+    candidate = Path(candidate)
+    prior = manifest.get("noise_basis") == "engineering_prior"
+    filename = "noise_prior.yaml" if prior else "allan_report.yaml"
+    expected = manifest.get("artifact_sha256", {}).get(filename)
+    path = candidate / filename
+    if not expected or not path.is_file() or sha256_file(path) != expected:
+        raise CalibrationError(f"Candidate noise evidence is missing or changed: {filename}")
+    noise = imu_config(read_yaml(candidate / "imu.yaml"), profile)
+    document = read_yaml(path)
+    if prior:
+        annotations = validate_noise_prior(document, noise, profile)
+        if any(type(manifest.get(key)) is not type(value) or manifest[key] != value
+               for key, value in annotations.items()):
+            raise CalibrationError("Candidate must preserve the unmeasured engineering noise prior flags")
+        return filename, annotations
+    if (document.get("status") != "PASSED" or document.get("formal_duration") is not True
+            or document.get("formal_eligible") is not True):
+        raise CalibrationError("Measured stationary >=1 hour Allan analysis is required")
+    require_candidate_profile(document, profile)
+    source = document.get("acquisition_manifest", {})
+    errors = session_provenance_errors(source, document.get("input_bag_sha256"), "allan", profile)
+    if errors or source.get("imu", {}).get("bridge_commit") != manifest["imu"]["bridge_commit"]:
+        raise CalibrationError("Allan acquisition must use the same clean committed bridge version")
+    if any(not np.isclose(noise[key], document.get("imu", {}).get(key, float("nan")), rtol=1e-8)
+           for key in NOISE_KEYS):
+        raise CalibrationError("IMU noise differs from measured Allan result")
+    return filename, {}
+
+
 def publish(candidate, replay_evidence, destination_root, profile=DEFAULT_PROFILE):
     """Publish only validated real data; candidate paths are never runtime defaults."""
     candidate = Path(candidate).resolve()
@@ -196,8 +236,9 @@ def publish(candidate, replay_evidence, destination_root, profile=DEFAULT_PROFIL
     if errors:
         raise CalibrationError("Formal provenance failed: " + "; ".join(sorted(set(errors))))
     hashes = manifest.get("artifact_sha256", {})
+    noise_filename = "noise_prior.yaml" if manifest.get("noise_basis") == "engineering_prior" else "allan_report.yaml"
     if not {"camchain.yaml", "imu.yaml", "kalibr_imucam_chain.yaml", "joint_covariance.npy",
-            "uncertainty.yaml", "report.pdf", "conversion.yaml", "allan_report.yaml"}.issubset(hashes):
+            "uncertainty.yaml", "report.pdf", "conversion.yaml", noise_filename}.issubset(hashes):
         raise CalibrationError("Candidate lacks hashes for required calibration artifacts")
     for name, expected_hash in hashes.items():
         if sha256_file(candidate / name) != expected_hash:
@@ -239,20 +280,12 @@ def publish(candidate, replay_evidence, destination_root, profile=DEFAULT_PROFIL
         raise CalibrationError("Held-out stereo, time sign, or inertial quality gates failed")
     if heldout.get("heldout_bag_sha256") == manifest["input_bag_sha256"]:
         raise CalibrationError("Held-out calibration data must differ from fitting data")
-    allan = read_yaml(candidate / "allan_report.yaml")
-    if allan.get("status") != "PASSED" or allan.get("formal_duration") is not True or allan.get("formal_eligible") is not True:
-        raise CalibrationError("Measured stationary >=1 hour Allan analysis is required")
-    allan_source = allan.get("acquisition_manifest", {})
-    require_candidate_profile(allan, profile)
-    allan_errors = session_provenance_errors(allan_source, allan.get("input_bag_sha256"), "allan", profile)
-    if allan_errors or allan_source.get("imu", {}).get("bridge_commit") != manifest["imu"]["bridge_commit"]:
-        raise CalibrationError("Allan acquisition must use the same clean committed bridge version")
-    measured = imu_config(read_yaml(candidate / "imu.yaml"), profile)
-    if any(not np.isclose(measured[key], allan.get("imu", {}).get(key, float("nan")), rtol=1e-8)
-           for key in NOISE_KEYS):
-        raise CalibrationError("IMU noise differs from measured Allan result")
+    noise_filename, noise_annotations = validate_candidate_noise(candidate, manifest, profile)
     export = read_yaml(candidate / "openvins_export.yaml")
     require_candidate_profile(export, profile)
+    if any(type(export.get(key)) is not type(value) or export[key] != value
+           for key, value in noise_annotations.items()):
+        raise CalibrationError("OpenVINS replay input lost the engineering noise prior flags")
     if hash_input(candidate / "openvins") != export.get("config_sha256"):
         raise CalibrationError("OpenVINS files changed after replay preparation")
     evidence = read_yaml(replay_evidence)
@@ -279,7 +312,7 @@ def publish(candidate, replay_evidence, destination_root, profile=DEFAULT_PROFIL
     output.mkdir(exist_ok=False)
     try:
         for name in ("camchain.yaml", "imu.yaml", "kalibr_imucam_chain.yaml", "report.pdf",
-                     "uncertainty.yaml", "joint_covariance.npy", "allan_report.yaml",
+                     "uncertainty.yaml", "joint_covariance.npy", noise_filename,
                      "conversion.yaml", "target.yaml", "command.yaml", "kalibr.log", "kalibr_covariance_entry.py",
                      "session_manifest.yaml"):
             shutil.copyfile(candidate / name, output / name)

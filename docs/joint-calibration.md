@@ -8,6 +8,8 @@
 
 当前用户明确接受“达不到先用 140 Hz 测试”，因此只将本 MAVLink 测试阶段的最低实测频率设为 **140 Hz**；DDS 运行通路及原 ≥200 Hz 目标保持原要求。所有产物显式记录 `calibration_phase: mavlink_140hz_test`、`deployment_scope: mavlink_140hz_test_only`、`minimum_observed_imu_rate_hz: 140.0`、`original_dds_200hz_requirement_satisfied: false`。这不是原 A0/DDS ≥200 Hz 验收通过声明。
 
+用户随后明确“不用完整 allan 分析了”。当前 MAVLink 测试阶段取消完整 Allan 前置要求，允许显式 `--noise-prior` 工程先验；短时噪声测试和整小时静止录制均不再是当前前置条件。DDS 原路径保持完整 Allan 要求，见 [ADR 0005](adr/0005-mavlink-noise-prior.md)。本例外不取消真实运动、独立留出、时间符号、协方差和 OpenVINS 回放检查。
+
 两条路径不互相代替：MAVLink 候选、Allan、留出集、回放和发布产物都必须显式选择同一 profile。即使通过本测试阶段所有检查，也不证明 DDS 采样或时间语义等价，不会自动成为 DDS 运行配置。既有 MAVROS `/mavros/imu/data_raw` 录包仍只能做格式回归。`formal_eligible`/`VALIDATED` 在此只表示通过已标注 profile 的血缘与数值检查，使用范围始终由上述阶段字段限制。
 
 `HIGHRES_IMU` 的数值是 PX4 已做估计器偏置补偿的区间均值，时间戳采用 `vehicle_imu.timestamp_sample` 端点；消息没有积分时长、独立加速度时间、裁剪/标定计数或完整设备标识。程序保留这些限制，不重造“积分中点”，不将其标记为原始未补偿 IMU。TIMESYNC 的 RTT/拟合误差描述时钟映射，不能独自证明相机与 IMU 的物理采样误差 ≤1 ms；仍须实际运动、留出集时间符号和残差检验。
@@ -30,16 +32,13 @@ docker image inspect rm-nav-kalibr:local
 
 系统包提供 NumPy、OpenCV、PyYAML；`rosbags` 固定版本安装到 venv。Kalibr 镜像必须已经存在，求解时解析为不可变 image ID，以 `--network none` 运行，并记录容器内实际 Kalibr commit。不会隐式下载镜像。实际环境说明见 [environment.md](environment.md)。
 
-## 采集三类真实数据
+## 采集拟合与留出的真实数据
 
-棋盘为 **8 列 × 11 行内角点，9 × 12 方格，边长 0.025 m**。方格边长须实测，图像识别无法验证毫米尺寸。相机与飞控必须刚性固定；静止、拟合和留出数据必须来自同一 MAVLink 采集版本及固定话题/采样语义。当前阶段的采集诊断和实际录包分别验证 IMU ≥140 Hz，配置请求或 ACK 不等于达到频率要求；其余 Allan 时长、时间同步、相机及留出质量门槛不变。
+棋盘为 **8 列 × 11 行内角点，9 × 12 方格，边长 0.025 m**。方格边长须实测，图像识别无法验证毫米尺寸。相机与飞控必须刚性固定；拟合和留出数据必须来自同一 MAVLink 采集版本及固定话题/采样语义。当前阶段的采集诊断和实际录包分别验证 IMU ≥140 Hz，配置请求或 ACK 不等于达到频率要求；噪声依据采用 ADR 0005 的阶段例外，时间同步、相机及留出质量门槛保留。
 
 ```bash
 # 双目内参：移动棋盘，覆盖图像边角、距离、倾斜角。
 ros2 run tools spr record --profile mavlink_calibration --mode stereo --duration 180 --show-ui
-
-# Allan：预热后让整个相机/飞控组件保持静止，预留录制启动余量。
-ros2 run tools spr record --profile mavlink_calibration --mode allan --duration 3700
 
 # 联合：棋盘固定，移动整个相机/飞控组件，充分激励三轴旋转和平移。
 ros2 run tools spr record --profile mavlink_calibration --mode joint --duration 180 --show-ui
@@ -47,9 +46,9 @@ ros2 run tools spr record --profile mavlink_calibration --mode joint --duration 
 
 另录一段独立的 `joint` 会话作留出集，目标同样保持固定。避开棋盘对称姿态翻转和运动模糊。保存原始 rosbag2；PNG/CSV 是派生数据。不要把同一录包复制、改 metadata 或重新封装后当作留出数据。
 
-MAVLink `allan` 模式在预检及录制中使用与离线分析相同的采样间隔门槛：至少 100 个实际时间戳，最大间隔 ≤1.5 倍中位周期，p99 绝对抖动 ≤10% 中位周期。实测平均频率 ≥140 Hz 仍可能不满足这些要求；不要录满一小时后才检查，也不要通过补点或重采样使数据通过。`joint`/`imu` 模式保留各自频率与连续性检查，运动标定可先行录制；采样检查通过也不等于已证明静止时长、噪声或联合标定有效。
+`joint`/`imu` 模式保留各自频率与连续性检查。既有 `allan` 工具仍保留严格测量语义：至少 100 个实际时间戳、最大间隔 ≤1.5 倍中位周期、p99 绝对抖动 ≤10% 中位周期，不补点或重采样。该可选测量工具的通过条件不作为当前工程先验路径的前置条件；当前不追加任何噪声或采样测试。
 
-静止 **≥1 h** 是 [REQ-CAL-003](../Project.md) 的本地验收下限，不是相机—IMU 运动录制时长，也不保证一定能拟合出零偏随机游走。[Kalibr 官方噪声模型说明](https://github.com/ethz-asl/kalibr/wiki/IMU-Noise-Model) 对完整静止噪声表征建议约 15–24 h；最终仍需检查实际 Allan 曲线的白噪声与随机游走区域。短时静止数据可用于初步检查，不能直接填齐未经测量的噪声参数。`allan` 模式只启动 IMU 通路，不启动相机；当前按用户安排暂缓噪声测试，运动数据的识别与格式转换可独立进行。
+静止 **≥1 h** 是 DDS 原路径与自愿完整 Allan 测量的本地时长下限，不是当前 MAVLink 的前置条件，也不是相机—IMU 运动录制时长。若未来选择测量路径，仍须检查真实 Allan 曲线的白噪声与随机游走区域，不能把工程先验标成测量结果。
 
 正式采集要求可复现且已提交的 Git 基线。`git.effective_clean` 只允许一条例外：根仓库其余部分干净，OpenVINS gitlink/HEAD 固定在约定基线，实际 diff、两个补丁和六个修改文件的哈希全部与 [兼容补丁](../docker/openvins/README.md) 一致；任何其他修改、暂存或未跟踪文件仍然拒绝。manifest 保留原始 Git status 和 `approved_patches`，不会隐去补丁状态。源码调试可显式使用 `--experimental`；旧数据不会在提交后被追认为正式采集。MAVLink 流程要求实际 `mavlink_timesync` 诊断；原 DDS 流程仍要求自己的 DDS 同步证据，不能靠切换 profile 或重命名话题补齐。
 
@@ -66,25 +65,47 @@ ros2 run calibration calibrate \
   --session runs/stereo_001/images/actual_session \
   --output runs/stereo_001/intrinsics
 
-ros2 run calibration joint_calibrate.py allan \
-  --profile mavlink_calibration \
-  --bag runs/static_001/bag \
-  --session-manifest runs/static_001/manifest.yaml \
-  --output runs/static_001/allan
-
 ros2 run calibration joint_calibrate.py solve \
   --profile mavlink_calibration \
   --bag runs/joint_001/bag \
   --camchain runs/stereo_001/intrinsics/camchain.yaml \
-  --imu runs/static_001/allan/imu.yaml \
-  --allan-report runs/static_001/allan/allan_report.yaml \
+  --imu runs/noise_prior_001/imu.yaml \
+  --noise-prior runs/noise_prior_001/prior.yaml \
   --session-manifest runs/joint_001/manifest.yaml \
   --output runs/joint_001/solve
 ```
 
-`inspect` 检查每条消息的类型、frame、时间戳、载荷及流模式。转换同时比较全部消息的记录时间、header 时间、像素/IMU/协方差哈希；逆序、重复时间戳不会被悄悄改写或排序。Allan 要求静止 ≥1 小时、采样间隔满足门槛，并在实际 Allan 曲线上找到白噪声 −1/2 和随机游走 +1/2 的拟合区域；找不到则延长采集，不填默认值。三轴分别拟合，导出各轴测量值的最大值及拟合报告。
+`inspect` 检查每条消息的类型、frame、时间戳、载荷及流模式。转换同时比较全部消息的记录时间、header 时间、像素/IMU/协方差哈希；逆序、重复时间戳不会被悄悄改写或排序。识别和转换不需要噪声文件，也不改变真实测量。示例 `solve` 需要事先明确提供的先验文件，不会自动填数值。
 
-`solve` 产生 **CANDIDATE**，包含 Kalibr PDF、标准 YAML、完整联合协方差/相关性、输入血缘、工具版本和容器命令。尚未证明硬件标定有效。源录包、IMU Allan 和 bridge 版本的血缘不完整时，候选结果保持不可正式发布。
+`solve` 产生 **CANDIDATE**，包含 Kalibr PDF、标准 YAML、完整联合协方差/相关性、输入血缘、工具版本和容器命令。尚未证明硬件标定有效。源录包、所选噪声依据和 bridge 版本的血缘不完整时，候选结果保持不可发布为本阶段已验收标定。
+
+### 显式工程噪声先验
+
+`--noise-prior` 仅适用于 `mavlink_calibration`，与 `--allan-report` 互斥，仍必须提供 `--imu`。先验 YAML 包含 `schema_version: 1`、`basis: engineering_prior`、`calibration_profile: mavlink_calibration`、`noise_model_measured: false`、`original_allan_requirement_satisfied: false`。其 `imu` 映射必须与 `--imu` 文件完全相同，包含实际话题 `/spr/calibration/imu`、已记录运动包的 `update_rate` 和四个正值参数。
+
+`parameter_sources` 为四个参数各记录 `kind`、`reference`、`rationale`、`unit`；数值只在 `imu` 中记录，不另设来源数值。数据手册参数标为 `datasheet_prior`，无法从手册得到的随机游走权重须标为 `engineering_assumption`，写明选择理由；两者均非实测噪声。
+
+| 参数 | Kalibr 连续时间单位 |
+| --- | --- |
+| `accelerometer_noise_density` | `m/s^2/sqrt(Hz)` |
+| `gyroscope_noise_density` | `rad/s/sqrt(Hz)` |
+| `accelerometer_random_walk` | `m/s^3/sqrt(Hz)` |
+| `gyroscope_random_walk` | `rad/s^2/sqrt(Hz)` |
+
+白噪声密度按 Kalibr 的 `sigma_discrete = density * sqrt(update_rate)` 使用。数据手册的 °/s、µg 单位必须显式换算；PX4 EKF 过程噪声调参值不能未经模型与单位核对直接改名填入。原先验文件及 SHA-256 随候选/导出归档并重新验证，产物必须始终带 `noise_basis: engineering_prior`、`noise_model_measured: false`、`original_allan_requirement_satisfied: false`。先验影响权重和局部协方差，不能把给定权重产生的协方差当成真实噪声已验证。
+
+### 可选测量与未来 DDS 路径
+
+保留的 `allan` 命令要求真实静止 ≥3600 秒、严格采样间隔和可支持 −1/2、+1/2 斜率的拟合区域；不足时失败，不填默认值。未来 DDS 路径仍要求匹配的 `--imu` 与 `--allan-report` 及其采集血缘。DDS 当前冻结；这里保留离线接口说明，不授权新硬件采集、噪声测试或 DDS 切换。
+
+以下仅说明未来恢复 DDS 路径后如何分析已停止的真实静止归档，不是当前待办：
+
+```bash
+ros2 run calibration joint_calibrate.py allan \
+  --profile dds_runtime --bag runs/dds_static_001/bag \
+  --session-manifest runs/dds_static_001/manifest.yaml \
+  --output runs/dds_static_001/allan
+```
 
 ## 留出集与 OpenVINS
 
@@ -125,7 +146,7 @@ ros2 run calibration joint_calibrate.py export \
   --destination calibrations
 ```
 
-发布会重新核对采集、Allan、留出集、协方差、配置及回放文件哈希，并复制小型回放证据。本测试阶段验收产物使用不可覆盖的 `calibrations/mavlink_calibration_<UTC>_<commit>_<inputhash>/`，始终保留 `mavlink_140hz_test_only` 使用范围，不代表 DDS 原目标通过。原始大录包保留在 `runs/`。缺失实际数据、未通过门槛或血缘不符时退出失败，不发布占位标定。
+发布会重新核对采集、所选噪声依据（工程先验或完整实测 Allan）、留出集、协方差、配置及回放文件哈希，并复制小型回放证据。本测试阶段验收产物使用不可覆盖的 `calibrations/mavlink_calibration_<UTC>_<commit>_<inputhash>/`，始终保留 `mavlink_140hz_test_only` 使用范围；工程先验产物同时保留未测量和原 Allan 要求未满足的标记，不代表 DDS 原目标通过。原始大录包保留在 `runs/`。缺失实际数据、未通过门槛或血缘不符时退出失败，不发布占位标定。
 
 发布时还会实际读取回放 bag 的两路图像和所选 profile 的 IMU，核对消息类型、frame、图像 profile 与实测 IMU 频率（本 MAVLink 阶段 ≥140 Hz），并与训练流比较消息/载荷指纹及 header 时间范围。重新封装训练 bag、更改容器元数据或只平移原消息时间戳，不能作为独立回放数据。检查得到的 `selected_topic_inspection` 会写入归档的回放证据；这些流检查不单独证明物理 IMU 来源或实际 VIO 精度，仍须真实回放及上述采集/评估证据。
 

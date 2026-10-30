@@ -65,7 +65,7 @@ export ROS_LOCALHOST_ONLY=1
 export SPR_MAVLINK_PYTHONPATH="$(.venv-sensors/bin/python -c 'import sysconfig; print(sysconfig.get_path("purelib"))')"
 ```
 
-两个库目录都须加入；从同一 shell 执行 [MAVLink 采集命令](joint-calibration.md#采集三类真实数据)，让所有子进程继承相同环境。关闭该 shell 并移除临时解包目录即可撤销。此选择只作用于主机 ROS 2 通信，全局默认 RMW 合同和飞控 DDS 冻结状态保持原样。早先 FastDDS 录包缺口的根因尚未证实；上述采集成功也不代表联合标定验收通过。
+两个库目录都须加入；从同一 shell 执行 [MAVLink 采集命令](joint-calibration.md#采集拟合与留出的真实数据)，让所有子进程继承相同环境。关闭该 shell 并移除临时解包目录即可撤销。此选择只作用于主机 ROS 2 通信，全局默认 RMW 合同和飞控 DDS 冻结状态保持原样。早先 FastDDS 录包缺口的根因尚未证实；上述采集成功也不代表联合标定验收通过。
 
 ## 离线标定依赖
 

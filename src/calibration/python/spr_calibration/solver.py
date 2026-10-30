@@ -14,6 +14,7 @@ from .common import (CalibrationError, camera_chain, hash_input,
                      imu_config, new_output, read_yaml, report_html, sha256_file,
                      target_config, tool_versions, utc_now, write_yaml)
 from .profiles import DEFAULT_PROFILE, MAVLINK_PROFILE, profile_annotations, profile_config
+from .noise import validate_noise_prior
 
 
 # This adapter adds covariance export to the existing real Kalibr estimator.
@@ -236,7 +237,13 @@ def covariance_report(path):
 
 
 def solve(bag, camchain, imu, output, image="rm-nav-kalibr:local", session_manifest=None, max_iter=30,
-          profile=DEFAULT_PROFILE):
+          profile=DEFAULT_PROFILE, *, noise_prior=None):
+    noise = imu_config(read_yaml(imu), profile)
+    noise_annotations = {"noise_basis": "provided_unverified", "noise_model_measured": False,
+                         "original_allan_requirement_satisfied": False}
+    if noise_prior is not None:
+        noise_annotations = validate_noise_prior(read_yaml(noise_prior), noise, profile)
+        noise_prior_sha256 = sha256_file(noise_prior)
     try:
         from spr_diagnostics.run import git_baseline
     except ImportError as error:
@@ -244,7 +251,6 @@ def solve(bag, camchain, imu, output, image="rm-nav-kalibr:local", session_manif
     implementation = git_baseline(Path.cwd())
     chain = camera_chain(read_yaml(camchain))
     contract = profile_config(profile)
-    noise = imu_config(read_yaml(imu), profile)
     source_manifest = read_yaml(session_manifest) if session_manifest else {}
     input_sha256 = hash_input(bag)
     errors = session_provenance_errors(source_manifest, input_sha256, "joint", profile)
@@ -277,6 +283,9 @@ def solve(bag, camchain, imu, output, image="rm-nav-kalibr:local", session_manif
                 "camchain_input_sha256": sha256_file(camchain), "imu_input_sha256": sha256_file(imu),
                 "time_convention": "t_imu = t_cam + timeshift_cam_imu"}
     manifest.update(profile_annotations(profile))
+    manifest.update(noise_annotations)
+    if noise_prior is not None:
+        manifest["noise_prior_input_sha256"] = noise_prior_sha256
     manifest["header_time_policy"] = (f"host_ros already produced by {contract['source']}; "
                                       "conversion preserves header timestamps without applying T_host_px4 again")
     if profile == MAVLINK_PROFILE:
@@ -290,6 +299,11 @@ def solve(bag, camchain, imu, output, image="rm-nav-kalibr:local", session_manif
         write_yaml(output / "camchain.yaml", chain)
         write_yaml(output / "imu.yaml", noise)
         write_yaml(output / "target.yaml", target_config())
+        if noise_prior is not None:
+            shutil.copyfile(noise_prior, output / "noise_prior.yaml")
+            if sha256_file(output / "noise_prior.yaml") != noise_prior_sha256:
+                raise CalibrationError("Noise prior changed after input validation")
+            validate_noise_prior(read_yaml(output / "noise_prior.yaml"), noise, profile)
         if session_manifest:
             shutil.copyfile(session_manifest, output / "session_manifest.yaml")
         topics = {chain[name]["rostopic"]: "sensor_msgs/msg/Image" for name in ("cam0", "cam1")}
@@ -304,7 +318,7 @@ def solve(bag, camchain, imu, output, image="rm-nav-kalibr:local", session_manif
         if profile == MAVLINK_PROFILE and actual_imu_rate < contract["min_rate_hz"]:
             raise CalibrationError(f"MAVLink motion bag must actually contain >={contract['min_rate_hz']:g} Hz HIGHRES_IMU")
         if abs(actual_imu_rate - noise["update_rate"]) > noise["update_rate"] * 0.1:
-            raise CalibrationError("Motion bag IMU rate differs by >10% from measured Allan noise update_rate")
+            raise CalibrationError("Motion bag IMU rate differs by >10% from declared IMU model update_rate")
         for name in ("cam0", "cam1"):
             actual = conversion["source"]["topics"][chain[name]["rostopic"]]["profile"][:2]
             if actual != chain[name]["resolution"]:
@@ -354,6 +368,8 @@ def solve(bag, camchain, imu, output, image="rm-nav-kalibr:local", session_manif
             "command.yaml", "kalibr_covariance_entry.py")}
         if session_manifest:
             manifest["artifact_sha256"]["session_manifest.yaml"] = sha256_file(output / "session_manifest.yaml")
+        if noise_prior is not None:
+            manifest["artifact_sha256"]["noise_prior.yaml"] = sha256_file(output / "noise_prior.yaml")
     except BaseException as error:
         manifest.update(status="FAILED", error=str(error), completed_utc=utc_now())
         raise

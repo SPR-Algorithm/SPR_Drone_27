@@ -9,6 +9,8 @@
 
 > **测试数据约定（2026-10-30）：** 根据用户“别用合成数据”的指令，REQ-CAL-010 使用真实采集回归；不执行生成棋盘或合成标定自检。见 [ADR 0004](docs/adr/0004-real-calibration-regressions.md)。
 
+> **当前 MAVLink 噪声依据（2026-10-30，用户明确指定）：** 用户取消当前测试阶段的完整 Allan 分析要求。`mavlink_calibration` 可显式提供带来源、单位、理由和不可变哈希的工程噪声先验 `--noise-prior`，不再以短时噪声测试或 ≥1 h 静止录制为前置条件。产物必须标记 `noise_basis: engineering_prior`、`noise_model_measured: false`、`original_allan_requirement_satisfied: false`；真实运动、独立留出、时间符号、协方差和 OpenVINS 回放门槛保留。DDS 原有完整 Allan 要求及冻结状态不变。见 [ADR 0005](docs/adr/0005-mavlink-noise-prior.md)。
+
 ---
 
 ## 0. 文档约定
@@ -89,7 +91,7 @@ SPR_Drone_27 是一架以**视觉惯性里程计（VIO）**为核心状态估计
 
 - D435i 左右 IR（Y8）+ PX4 飞控 IMU；关闭 D435i depth/color/内置 IMU/IR 投影仪；
 - 双目内参/畸变/外参标定；
-- IMU 噪声（Allan）与相机—IMU 时空联合标定（Kalibr）；
+- IMU 噪声依据与相机—IMU 时空联合标定（Kalibr）；当前 MAVLink 工程先验例外见 ADR 0005，DDS 原路径仍需完整 Allan；
 - OpenVINS 双目 VIO 配置、回放验证、Rock 4D 部署；
 - A0 起提供最小 `px4_bridge`（`SensorCombined`→`/spr/imu`，含 frame/时间/协方差语义），保证标定与运行时使用**同一 IMU 通路**；A1 再接入 EKF2/offboard；
 - PX4 1.16 + uXRCE-DDS：VIO → EKF2 外部视觉融合；offboard 位置/航点控制；
@@ -512,7 +514,7 @@ msg/MissionState.msg
 calibrations/<calib_id>/
 ├── manifest.yaml              # 输入、git、配置、哈希、时间、工具版本
 ├── camchain.yaml              # 双目内参/畸变/外参
-├── imu.yaml                   # Allan 噪声/随机游走
+├── imu.yaml                   # 本 profile 的噪声密度/随机游走；来源必须显式记录
 ├── kalibr_imucam_chain.yaml   # 相机—IMU 外参 + timeshift
 ├── openvins/
 │   ├── estimator_config.yaml
@@ -531,6 +533,7 @@ calibrations/<calib_id>/
 - 所有中间产物使用标准 YAML 1.1/1.2 或 JSON；**禁止**用 OpenCV `FileStorage` 的 `%YAML:1.0` 作为跨语言交换格式（PyYAML 无法解析 `%YAML:1.0`，已在本机 `meta.yaml` 上复现）。OpenVINS 需要的 `%YAML:1.0` 只在最终导出时生成。
 - 运行时启动必须校验 `manifest.yaml` 中的哈希与当前 `calibration.yaml` 一致；不一致则拒绝启动并报诊断事件。
 - 没有通过留出 bag 验证的标定结果**不得**进入 `calibrations/`。
+- 当前 MAVLink 工程先验路径须归档 `--noise-prior` 原文件及 SHA-256，四个噪声参数分别记录值、种类、来源、理由和单位；不得把工程权重标成测量结果或把本测试阶段产物改标签用于 DDS。此路径不要求补做短时或整小时噪声采集。
 
 ### 5.5 PX4 接口
 
@@ -572,7 +575,7 @@ calibrations/<calib_id>/
 | --- | --- | --- | --- | --- |
 | REQ-CAL-001 | **必须**完成 D435i IR1/IR2 双目内参、radtan 4 参数畸变、相对外参标定 | 848×480@30 实测确认的等价 profile；≥30 对采集、≥20 对最终、stereo RMS ≤0.5 px、单图 ≤1.0 px、覆盖率 ≥80% | A0 | 框架 |
 | REQ-CAL-002 | **必须**用 rosbag2 记录原始双目 + IMU；PNG/索引只是派生数据 | bag 可回放、消息数/时间戳/载荷校验通过 | A0 | 框架 |
-| REQ-CAL-003 | **必须**完成飞控 IMU 的 Allan 噪声分析（静止 ≥1 h，不足则延长） | `imu.yaml` 含噪声密度/随机游走/拟合报告，无默认占位值 | A0 | 框架 |
+| REQ-CAL-003 | DDS 原路径**必须**完成飞控 IMU 的 Allan 噪声分析（静止 ≥1 h，不足则延长）；当前 MAVLink 测试阶段按 ADR 0005 可显式采用工程先验 | `imu.yaml` 含四个有来源的噪声参数；测量路径保存拟合报告，MAVLink 先验路径保存逐项来源/理由/单位与先验哈希并明确未测量、原 Allan 要求未满足；无默认占位值 | A0 | 框架 |
 | REQ-CAL-004 | **必须**完成相机—IMU 时空联合标定（Kalibr），输出外参与 timeshift | 留出 bag 重投影误差达标；time offset 有符号检查；PDF 报告归档 | A0 | 框架 |
 | REQ-CAL-005 | **必须**报告 RMS 之外的质量：参数不确定度、相关性、留出集误差、覆盖率 | 报告中每项可见；不达标的参数明确标红 | A0 | 框架 |
 | REQ-CAL-006 | **必须**有标定血缘：输入哈希、git、配置、工具版本、标定 ID | `manifest.yaml` 可在无网络环境复现 | A0 | 框架 |

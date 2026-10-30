@@ -15,7 +15,7 @@ Owner: SilverWolf（框架 / VIO）。ROS 2 Humble/Jazzy 的 D435i 双目采集�
 | --- | --- | --- |
 | 双目相机内参 | 可移动，改变距离、倾角和画面位置 | 相机可固定；也可固定板并移动相机 |
 | 相机–飞控 IMU 联合标定及留出 | 固定不动 | 相机与飞控刚性固定，整体做三轴旋转和平移 |
-| IMU Allan 噪声 | 不需要 | 预热后整个组件保持静止 ≥1 小时 |
+| IMU Allan 噪声（可选测量或未来 DDS 路径；当前 MAVLink 不要求） | 不需要 | 预热后整个组件保持静止 ≥1 小时 |
 
 联合标定可以手持飞机本体移动，无需起飞；只移动标定板不能激励飞控 IMU。
 
@@ -73,9 +73,13 @@ ros2 run calibration combine_sessions.py \
 
 ## 飞控 IMU 与联合标定
 
-完整实机操作、数据来源与验收要求见 [联合标定手册](../../docs/joint-calibration.md)。入口为 `ros2 run calibration joint_calibrate.py --help`。提供 `inspect`、`convert`、`allan`、`solve`、`validate`、`prepare-openvins`、`export` 子命令。正式流程需要 ≥1 小时静止 IMU bag、实际运动标定 bag、独立留出 bag、真实 Kalibr PDF 和 OpenVINS 回放证据；缺失时不得发布到 `calibrations/`。
+完整实机操作、数据来源与验收要求见 [联合标定手册](../../docs/joint-calibration.md)。入口为 `ros2 run calibration joint_calibrate.py --help`。提供 `inspect`、`convert`、`allan`、`solve`、`validate`、`prepare-openvins`、`export` 子命令。当前用户已取消 MAVLink 测试阶段完整 Allan 分析的前置要求，允许显式 `--noise-prior` 工程先验，见 [ADR 0005](../../docs/adr/0005-mavlink-noise-prior.md)。实际运动、独立留出、真实 Kalibr PDF、联合协方差和 OpenVINS 回放证据仍须通过；缺失时不得发布为已验收标定。
 
-`--profile mavlink_calibration` 必须贯穿所有离线步骤。当前按用户“先用 140 Hz 测试”的要求，仅该 profile 的 Allan、运动和留出包实测频率门槛改为 ≥140 Hz；请求/ACK 不证明实际频率。产物记录 `calibration_phase: mavlink_140hz_test`、`deployment_scope: mavlink_140hz_test_only`、`minimum_observed_imu_rate_hz: 140.0` 和 `original_dds_200hz_requirement_satisfied: false`，不改写 DDS 配置或宣称原 A0 ≥200 Hz 目标通过。Allan ≥1 小时与其他数值/血缘门槛保持不变。
+`--profile mavlink_calibration` 必须贯穿所有离线步骤。当前运动和留出包实测频率门槛为 ≥140 Hz；请求/ACK 不证明实际频率。产物记录 `calibration_phase: mavlink_140hz_test`、`deployment_scope: mavlink_140hz_test_only`、`minimum_observed_imu_rate_hz: 140.0` 和 `original_dds_200hz_requirement_satisfied: false`，不改写 DDS 配置或宣称原 A0 ≥200 Hz 目标通过。噪声依据采用 ADR 0005 的当前阶段例外；其他数值/血缘门槛保留，DDS 原路径仍要求完整 Allan。
+
+工程先验必须由用户显式提供文件，不自动生成默认噪声。四个参数 `gyroscope_noise_density`、`gyroscope_random_walk`、`accelerometer_noise_density`、`accelerometer_random_walk` 均须有数值、`kind`、`reference`、`rationale`、`unit`；先验原文件的 SHA-256 随候选及导出归档。必须保留 `noise_basis: engineering_prior`、`noise_model_measured: false`、`original_allan_requirement_satisfied: false`。手册列明连续时间单位；板载 EKF 调参值不能未经模型与单位核对直接改名填入 Kalibr。
+
+先验文件的 `imu` 映射必须与 `--imu` 文件完全相同；四个数值放在 `imu` 中，对应的 `kind/reference/rationale/unit` 放在 `parameter_sources` 中。完整字段约定见 ADR 0005；`--noise-prior` 与 `--allan-report` 互斥，只有当前 MAVLink profile 可使用工程先验例外。
 
 `HIGHRES_IMU` 保留 PX4 偏置补偿区间均值及样本端点时间，消息缺失积分时长，不重造积分中点。时钟拟合误差不能独自证明物理采样同步；实际时差由运动求解及独立留出检查验证。即使本 profile 发布为 `VALIDATED`，使用范围仍限制在上述 MAVLink 测试阶段。
 
@@ -86,20 +90,17 @@ ros2 run calibration combine_sessions.py \
 source .venv-calibration/bin/activate
 pip install -r src/calibration/requirements-tools.txt
 ros2 run calibration joint_calibrate.py inspect --profile mavlink_calibration --bag runs/motion_001/bag
-ros2 run calibration joint_calibrate.py allan \
-  --profile mavlink_calibration --bag runs/static_001/bag \
-  --session-manifest runs/static_001/manifest.yaml --output runs/allan_001
 ros2 run calibration joint_calibrate.py solve \
   --profile mavlink_calibration \
   --bag runs/motion_001/bag --camchain runs/stereo_001/camchain.yaml \
-  --imu runs/allan_001/imu.yaml --allan-report runs/allan_001/allan_report.yaml \
+  --imu runs/noise_prior_001/imu.yaml --noise-prior runs/noise_prior_001/prior.yaml \
   --session-manifest runs/motion_001/manifest.yaml --output runs/joint_001
 ros2 run calibration joint_calibrate.py validate \
   --profile mavlink_calibration --candidate runs/joint_001 \
   --bag runs/heldout_001/bag --session-manifest runs/heldout_001/manifest.yaml
 ```
 
-静止 bag 必须达到 3600 秒；标定/留出录制时固定棋盘，整体移动相机与飞控，二者安装关系必须刚性固定。`prepare-openvins` 仅生成候选回放输入；实际 OpenVINS 回放通过后，才能向 `export --replay-evidence` 提供真实报告并发布。
+当前 MAVLink 工程先验路径不要求短时噪声测试或静止 bag。标定/留出录制时固定棋盘，整体移动相机与飞控，二者安装关系必须刚性固定。`prepare-openvins` 仅生成候选回放输入；实际 OpenVINS 回放通过后，才能向 `export --replay-evidence` 提供真实报告并发布。可选实测或未来 DDS 路径继续使用 ≥3600 秒静止 bag 的 `allan` 命令及匹配的 `--imu`、`--allan-report`；不足时不得声称完成完整 Allan。
 
 ## 验证
 
