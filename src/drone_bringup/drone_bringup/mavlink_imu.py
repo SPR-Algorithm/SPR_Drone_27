@@ -29,6 +29,8 @@ DEFAULTS = {
     'deployment_scope': 'mavlink_calibration_only',
 }
 
+INTERVAL_QUERY_TIMEOUT_NS = 2_000_000_000
+
 
 class ArmedController(RuntimeError):
     pass
@@ -56,7 +58,7 @@ class MavlinkImuSession:
         self.last_output_mono = None
         self.last_boot_us = None
         self.last_mapped_ns = None
-        self.pending_interval_at = None
+        self.interval_query_deadline_ns = None
         self.interval_requested = False
         self.interval_ack = None
         self.original_interval_us = None
@@ -111,8 +113,8 @@ class MavlinkImuSession:
                     self._process(message, time.time_ns(), time.monotonic_ns())
             if self.target is None:
                 raise TimeoutError('no disarmed PX4 autopilot heartbeat')
-            self._command(510, 105, 0)  # Read original HIGHRES_IMU interval.
-            self.pending_interval_at = time.monotonic_ns() + 200_000_000
+            self.interval_query_deadline_ns = time.monotonic_ns() + INTERVAL_QUERY_TIMEOUT_NS
+            self._command(510, 105, 0)  # Read original HIGHRES_IMU interval before any rate change.
         except Exception:
             self._close_transport(restore=False)
             raise
@@ -152,10 +154,8 @@ class MavlinkImuSession:
         self.clock.tick(now_wall, now_mono)
         if self.last_heartbeat is not None and now_mono - self.last_heartbeat > 3_000_000_000:
             raise TimeoutError('PX4 heartbeat timeout')
-        if self.pending_interval_at is not None and now_mono >= self.pending_interval_at:
-            self._command(511, 105, round(1e6 / self.config['requested_rate_hz']))
-            self.pending_interval_at = None
-            self.interval_requested = True
+        if self.interval_query_deadline_ns is not None and now_mono >= self.interval_query_deadline_ns:
+            raise TimeoutError('no original HIGHRES_IMU interval response; stream rate unchanged')
         if self.target is not None and now_mono >= self.next_sync_ns:
             token = self.clock.request(now_wall, now_mono)
             self.link.mav.timesync_send(0, token)
@@ -179,10 +179,23 @@ class MavlinkImuSession:
             return
         if origin != self.target:
             return
-        if kind == 'MESSAGE_INTERVAL' and message.message_id == 105 and not self.interval_requested:
+        if (kind == 'MESSAGE_INTERVAL' and message.message_id == 105 and
+                self.interval_query_deadline_ns is not None):
+            if mono >= self.interval_query_deadline_ns:
+                raise TimeoutError('no original HIGHRES_IMU interval response; stream rate unchanged')
+            # MESSAGE_INTERVAL uses 0 for unavailable, unlike SET's 0 = default.
+            # See https://mavlink.io/en/messages/common.html#MESSAGE_INTERVAL.
+            if message.interval_us == 0 or message.interval_us < -1:
+                raise RuntimeError('original HIGHRES_IMU interval unavailable or invalid; stream rate unchanged')
             self.original_interval_us = message.interval_us
             self.event('original_stream_interval', interval_us=message.interval_us)
-        elif kind == 'COMMAND_ACK' and message.command == 511:
+            self.interval_query_deadline_ns = None
+            self.interval_requested = True
+            self._command(511, 105, round(1e6 / self.config['requested_rate_hz']))
+        elif (kind == 'COMMAND_ACK' and message.command == 510 and
+                self.interval_query_deadline_ns is not None and message.result not in (0, 5)):
+            raise RuntimeError('PX4 rejected original HIGHRES_IMU interval query; stream rate unchanged')
+        elif kind == 'COMMAND_ACK' and message.command == 511 and self.interval_requested:
             self.interval_ack = int(message.result)
             self.event('interval_acknowledged', result=self.interval_ack)
             if self.interval_ack != 0:
@@ -284,9 +297,10 @@ class MavlinkImuSession:
 
     def _close_transport(self, restore=True):
         if self.link is not None:
-            if restore and self.interval_requested and not self.armed and self.target is not None:
+            if (restore and self.interval_requested and self.original_interval_us is not None and
+                    not self.armed and self.target is not None):
                 try:
-                    original = self.original_interval_us if self.original_interval_us is not None else 0
+                    original = self.original_interval_us
                     self._command(511, 105, original)
                     acknowledged = False
                     deadline = time.monotonic() + 1.0
@@ -309,7 +323,7 @@ class MavlinkImuSession:
                             break
                     self.event('stream_interval_restored', requested_us=original,
                                acknowledged=acknowledged, readback_us=readback)
-                    if not acknowledged or readback is None or (original > 0 and readback != original):
+                    if not acknowledged or readback != original:
                         self.event('stream_restore_failed', error='restore acknowledgement/readback mismatch')
                     # Only restores the transient per-link stream interval; no PX4 parameter is written.
                 except Exception as error:
@@ -322,6 +336,7 @@ class MavlinkImuSession:
         self.interval_requested = False
         self.interval_ack = None
         self.original_interval_us = None
+        self.interval_query_deadline_ns = None
 
     def close(self):
         self.write_status()
