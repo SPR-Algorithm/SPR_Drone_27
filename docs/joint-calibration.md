@@ -27,10 +27,11 @@ source install/setup.bash
 .venv-calibration/bin/python -m pip install -r src/calibration/requirements-tools.txt
 source .venv-calibration/bin/activate
 ros2 run calibration joint_calibrate.py --help
-docker image inspect rm-nav-kalibr:local
+DOCKER_BUILDKIT=0 docker build --network none --pull=false -t spr-kalibr-cholmod:local docker/kalibr
+docker image inspect spr-kalibr-cholmod:local
 ```
 
-系统包提供 NumPy、OpenCV、PyYAML；`rosbags` 固定版本安装到 venv。Kalibr 镜像必须已经存在，求解时解析为不可变 image ID，以 `--network none` 运行，并记录容器内实际 Kalibr commit。不会隐式下载镜像。实际环境说明见 [environment.md](environment.md)。
+系统包提供 NumPy、OpenCV、PyYAML；`rosbags` 固定版本安装到 venv。本机固定基镜像需要 [CHOLMOD 链接修复](../docker/kalibr/README.md)；上述构建使用已有缓存，不下载依赖。求解默认使用 `spr-kalibr-cholmod:local`，解析为不可变 image ID，以 `--network none` 运行，并记录容器内实际 Kalibr commit。不会隐式下载镜像。实际环境说明见 [environment.md](environment.md)。
 
 ## 采集拟合与留出的真实数据
 

@@ -1,0 +1,16 @@
+diff --git a/aslam_nonparametric_estimation/bsplines/CMakeLists.txt b/aslam_nonparametric_estimation/bsplines/CMakeLists.txt
+--- a/aslam_nonparametric_estimation/bsplines/CMakeLists.txt
++++ b/aslam_nonparametric_estimation/bsplines/CMakeLists.txt
+@@ -20,7 +20,11 @@ add_library(${PROJECT_NAME}
+   src/BSpline.cpp
+   src/BSplinePose.cpp
+ )
+-target_link_libraries(${PROJECT_NAME} ${catkin_LIBRARIES})
++if(NOT CHOLMOD_LIBRARY OR NOT SUITESPARSE_LIBRARIES)
++  message(FATAL_ERROR "bsplines requires the SuiteSparse/CHOLMOD libraries")
++endif()
++target_link_libraries(${PROJECT_NAME}
++  ${catkin_LIBRARIES} ${CHOLMOD_LIBRARY} ${SUITESPARSE_LIBRARIES})
+ 
+ install(TARGETS ${PROJECT_NAME}
+   ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}

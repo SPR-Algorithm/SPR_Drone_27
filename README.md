@@ -14,7 +14,7 @@ Intel RealSense D435i IR 双目 + PX4 飞控 IMU 的视觉里程计项目。
 
 **当前先使用 MAVLink 完成相机—IMU 联合标定，之后再迁移 DDS。** 选择 `mavlink_calibration`，IMU 话题为 `/spr/calibration/imu`，当前测试要求实测 ≥140 Hz。DDS 不作为当前标定的前置条件，保持冻结；阶段安排见 [ADR 0002](docs/adr/0002-mavlink-calibration-phase.md)。
 
-代码构建或棋盘检测通过，不表示真实联合标定已完成。当前流程仍需要真实 MAVLink 静止记录（Allan ≥1 小时）、运动与独立留出记录、Kalibr 求解和 OpenVINS 回放证据。本入口不解锁、不发布飞行控制命令。
+代码构建或棋盘检测通过，不表示真实联合标定已完成。当前流程需要真实 MAVLink 运动与独立留出记录、Kalibr 求解和 OpenVINS 回放证据。按用户最新安排，完整 Allan 不再是当前 MAVLink 阶段的前置条件；使用显式、有来源且标注未实测的工程噪声先验，见 [ADR 0005](docs/adr/0005-mavlink-noise-prior.md)。本入口不解锁、不发布飞行控制命令。
 
 ## 构建
 

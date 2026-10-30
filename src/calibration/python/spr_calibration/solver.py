@@ -17,6 +17,9 @@ from .profiles import DEFAULT_PROFILE, MAVLINK_PROFILE, profile_annotations, pro
 from .noise import validate_noise_prior
 
 
+DEFAULT_KALIBR_IMAGE = "spr-kalibr-cholmod:local"
+
+
 # This adapter adds covariance export to the existing real Kalibr estimator.
 # It does not alter its optimization or measurement model. The covariance is
 # ordered [imu->cam0 rotation(3), translation(3), camera timeshifts(N)].
@@ -236,7 +239,7 @@ def covariance_report(path):
             "note": "Kalibr local linearized estimator covariance; systematic errors are not represented"}
 
 
-def solve(bag, camchain, imu, output, image="rm-nav-kalibr:local", session_manifest=None, max_iter=30,
+def solve(bag, camchain, imu, output, image=DEFAULT_KALIBR_IMAGE, session_manifest=None, max_iter=30,
           profile=DEFAULT_PROFILE, *, noise_prior=None):
     noise = imu_config(read_yaml(imu), profile)
     noise_annotations = {"noise_basis": "provided_unverified", "noise_model_measured": False,

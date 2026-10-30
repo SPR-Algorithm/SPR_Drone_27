@@ -13,7 +13,7 @@ from .common import (CalibrationError, camera_chain, hash_input, new_output,
                      read_yaml, report_html, sha256_file, tool_versions, write_yaml)
 from .export import prepare_openvins, publish
 from .noise import validate_noise_prior
-from .solver import hardware_equivalence_errors, session_provenance_errors, solve
+from .solver import DEFAULT_KALIBR_IMAGE, hardware_equivalence_errors, session_provenance_errors, solve
 from .profiles import (DEFAULT_PROFILE, MAVLINK_PROFILE, PROFILES, profile_annotations,
                        profile_config, require_candidate_profile)
 from .validation import validate_heldout
@@ -51,7 +51,7 @@ def parser():
     noise_evidence.add_argument("--allan-report", type=Path, help="Measured Allan report from this tool")
     noise_evidence.add_argument("--noise-prior", type=Path,
                                 help="Source-attributed engineering prior; MAVLink test phase only, unmeasured")
-    command.add_argument("--image", default="rm-nav-kalibr:local", help="Local image; resolved to sha256 before execution")
+    command.add_argument("--image", default=DEFAULT_KALIBR_IMAGE, help="Local image; resolved to sha256 before execution")
     command.add_argument("--max-iter", type=int, default=30)
     command = sub.add_parser("validate", help="Independent fixed-target held-out stereo + gyro/accel/time-sign checks")
     command.add_argument("--candidate", type=Path, required=True)

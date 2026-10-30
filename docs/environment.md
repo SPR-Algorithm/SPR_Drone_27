@@ -81,6 +81,6 @@ pip install -r src/calibration/requirements-tools.txt
 
 独立的 ROS 1 转换验证属于准备工作；后续 `solve --bag` 仍传原始 ROS 2 bag。转换包的文件哈希不同，不能与原采集 manifest 直接配对使用。
 
-联合求解读取本地 Kalibr Docker 镜像并解析到不可变镜像 ID；现有主机 `rm-nav-kalibr:local` 对应 Kalibr commit `1f60227442d25e36365ef5f72cd80b9666d73467`。新机器的可复现容器分发、ARM64 和完整 CI 仍需补齐；目前不宣称干净机器全链路验收完成。
+联合求解读取本地 Kalibr Docker 镜像并解析到不可变镜像 ID；现有基镜像 `rm-nav-kalibr:local` 对应 Kalibr commit `1f60227442d25e36365ef5f72cd80b9666d73467`。实际求解发现该镜像的 bsplines 缺少 CHOLMOD 直接链接，须先按 [容器修复说明](../docker/kalibr/README.md) 离线构建 `spr-kalibr-cholmod:local`；这是当前求解默认镜像，原镜像保留。新机器的完整容器构建/分发、ARM64 和 CI 仍需补齐；目前不宣称干净机器全链路验收完成。
 
 DDS 主机 Agent 的锁定版本及准备材料位于 `docker/px4/`，当前阶段冻结，不是 MAVLink 标定的安装或运行前置条件。
