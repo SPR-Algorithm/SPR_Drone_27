@@ -123,6 +123,8 @@ ros2 run calibration joint_calibrate.py export \
 
 发布会重新核对采集、Allan、留出集、协方差、配置及回放文件哈希，并复制小型回放证据。本测试阶段验收产物使用不可覆盖的 `calibrations/mavlink_calibration_<UTC>_<commit>_<inputhash>/`，始终保留 `mavlink_140hz_test_only` 使用范围，不代表 DDS 原目标通过。原始大录包保留在 `runs/`。缺失实际数据、未通过门槛或血缘不符时退出失败，不发布占位标定。
 
+发布时还会实际读取回放 bag 的两路图像和所选 profile 的 IMU，核对消息类型、frame、图像 profile 与实测 IMU 频率（本 MAVLink 阶段 ≥140 Hz），并与训练流比较消息/载荷指纹及 header 时间范围。重新封装训练 bag、更改容器元数据或只平移原消息时间戳，不能作为独立回放数据。检查得到的 `selected_topic_inspection` 会写入归档的回放证据；这些流检查不单独证明物理 IMU 来源或实际 VIO 精度，仍须真实回放及上述采集/评估证据。
+
 ## 已有真实数据的转换验证
 
 `runs/offline_conversion_20261029T115739Z/` 保存既有 2026-10-28 录包的转换证据：左右图像各 1821 条，IMU 6078 条，总计 9720 条，转换前后全部语义载荷/时间/数量一致，实际 Noetic `rosbag info` 可读。该旧包的 IMU 来自 MAVROS，仅用于格式回归；约 60.8 秒的数据不足 Allan 门槛，也未证明棋盘或联合标定成功。报告仅归档小型证据，没有复制 1.4 GB 录包。

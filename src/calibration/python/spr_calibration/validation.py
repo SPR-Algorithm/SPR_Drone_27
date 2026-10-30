@@ -155,6 +155,41 @@ def accelerometer_consistency(times, target_from_imu, imu_times, imu_accel, shif
             "note": "Checks rigid lever arm under fixed target assumption; no extrinsic refit"}
 
 
+def validate_stream_independence(observed_topics, training_topics, imu_topic, label="Held-out"):
+    """Compare actual bag inspection reports, including repackaged/retimed copies."""
+    if (not isinstance(training_topics, dict) or not isinstance(observed_topics, dict)
+            or not training_topics or set(observed_topics) != set(training_topics)):
+        raise CalibrationError(f"Training/{label.lower()} topic fingerprints are missing or inconsistent")
+    for topic, observed in observed_topics.items():
+        training = training_topics[topic]
+        if not isinstance(training, dict) or not isinstance(observed, dict):
+            raise CalibrationError(f"{topic}: training/{label.lower()} inspection is malformed")
+        if observed.get("type") != training.get("type"):
+            raise CalibrationError(f"{topic}: {label.lower()} message type differs from training")
+        if not observed.get("frame_id") or observed["frame_id"] != training.get("frame_id"):
+            raise CalibrationError(f"{topic}: {label.lower()} frame differs from training")
+        if topic == imu_topic and observed["frame_id"] != "imu_link":
+            raise CalibrationError(f"{label} IMU frame must be imu_link")
+        if observed.get("type") == "sensor_msgs/msg/Image" and (
+                not observed.get("profile") or observed["profile"] != training.get("profile")):
+            raise CalibrationError(f"{topic}: {label.lower()} image profile differs from training")
+        for key in ("semantic_sha256", "ordered_payload_sha256"):
+            if any(not isinstance(item.get(key), str) or len(item[key]) != 64
+                   for item in (training, observed)):
+                raise CalibrationError(f"{topic}: training/{label.lower()} {key} fingerprint is missing")
+        if observed["semantic_sha256"] == training["semantic_sha256"]:
+            raise CalibrationError(f"{topic}: {label.lower()} recording reuses training messages")
+        if observed["ordered_payload_sha256"] == training["ordered_payload_sha256"]:
+            raise CalibrationError(f"{topic}: {label.lower()} recording contains identical training payloads")
+        for item in (training, observed):
+            start, end = item.get("first_header_ns"), item.get("last_header_ns")
+            if (any(isinstance(value, bool) or not isinstance(value, int) or value <= 0
+                    for value in (start, end)) or end < start):
+                raise CalibrationError(f"{topic}: training/{label.lower()} header time range is missing or invalid")
+        if max(observed["first_header_ns"], training["first_header_ns"]) <= min(observed["last_header_ns"], training["last_header_ns"]):
+            raise CalibrationError(f"{topic}: {label.lower()} recording overlaps training header time range")
+
+
 def validate_heldout(bag, chain, training_hash, training_topics, pair_tolerance_s=0.001, max_pairs=None,
                      imu_topic="/spr/imu"):
     camera_chain(chain, joint=True)
@@ -163,22 +198,7 @@ def validate_heldout(bag, chain, training_hash, training_topics, pair_tolerance_
     left_topic, right_topic = (chain[name]["rostopic"] for name in ("cam0", "cam1"))
     topics = {left_topic: "sensor_msgs/msg/Image", right_topic: "sensor_msgs/msg/Image"}
     inspection = inspect_bag(bag, {**topics, imu_topic: "sensor_msgs/msg/Imu"})
-    if not isinstance(training_topics, dict) or set(inspection["topics"]) != set(training_topics):
-        raise CalibrationError("Training/held-out topic fingerprints are missing or inconsistent")
-    for topic, heldout in inspection["topics"].items():
-        training = training_topics[topic]
-        if heldout["frame_id"] != training.get("frame_id"):
-            raise CalibrationError(f"{topic}: held-out frame differs from training")
-        if topic == imu_topic and heldout["frame_id"] != "imu_link":
-            raise CalibrationError("Held-out IMU frame must be imu_link")
-        if "profile" in heldout and heldout["profile"] != training.get("profile"):
-            raise CalibrationError(f"{topic}: held-out image profile differs from training")
-        if heldout["semantic_sha256"] == training.get("semantic_sha256"):
-            raise CalibrationError(f"{topic}: held-out recording reuses training messages")
-        if heldout["ordered_payload_sha256"] == training.get("ordered_payload_sha256"):
-            raise CalibrationError(f"{topic}: held-out recording contains identical training payloads")
-        if max(heldout["first_header_ns"], training["first_header_ns"]) <= min(heldout["last_header_ns"], training["last_header_ns"]):
-            raise CalibrationError(f"{topic}: held-out recording overlaps training header time range")
+    validate_stream_independence(inspection["topics"], training_topics, imu_topic)
     if not np.isfinite(pair_tolerance_s) or not 0 < pair_tolerance_s <= 0.01:
         raise CalibrationError("Recorded stereo pair tolerance must be positive and <=10 ms")
     pending = {left_topic: [], right_topic: []}

@@ -1,0 +1,66 @@
+{
+  "input_sha256": "dadbec046a37f8439abd1dafea59c012bd463da3053719d9c206e6a5522dab62",
+  "topics": {
+    "/camera/camera/infra1/image_rect_raw": {
+      "type": "sensor_msgs/msg/Image",
+      "count": 1821,
+      "first_header_ns": 1793194039647718075,
+      "last_header_ns": 1793194100333662075,
+      "duration_s": 60.685944,
+      "rate_hz": 29.99047028089404,
+      "median_rate_hz": 29.990403071017276,
+      "interval_p99_s": 0.033344,
+      "max_interval_s": 0.033344,
+      "frame_id": "camera_infra1_optical_frame",
+      "semantic_sha256": "6d6253011404fb602e49f52498dcdb69f7e356f5c1f075be021a460deb6c907d",
+      "ordered_payload_sha256": "42213494c876606992ebea4ae8ab19a6604a9b5f03f9595dfdd3c6c8c7562d80",
+      "profile": [
+        848,
+        480,
+        "mono8",
+        848
+      ]
+    },
+    "/camera/camera/infra2/image_rect_raw": {
+      "type": "sensor_msgs/msg/Image",
+      "count": 1821,
+      "first_header_ns": 1793194039647718075,
+      "last_header_ns": 1793194100333662075,
+      "duration_s": 60.685944,
+      "rate_hz": 29.99047028089404,
+      "median_rate_hz": 29.990403071017276,
+      "interval_p99_s": 0.033344,
+      "max_interval_s": 0.033344,
+      "frame_id": "camera_infra2_optical_frame",
+      "semantic_sha256": "cedb05196de884c705ae96d9d9e14c0e209f3b636cd6d1e395d86d2aa9aa7e64",
+      "ordered_payload_sha256": "90955b2008771197cffe09702d10fbc920235f641c67a066998a03e2ff8a1de7",
+      "profile": [
+        848,
+        480,
+        "mono8",
+        848
+      ]
+    },
+    "/mavros/imu/data_raw": {
+      "type": "sensor_msgs/msg/Imu",
+      "count": 6078,
+      "first_header_ns": 1793194039590763296,
+      "last_header_ns": 1793194100382854001,
+      "duration_s": 60.792090705,
+      "rate_hz": 99.96366187649772,
+      "median_rate_hz": 95.49274255156608,
+      "interval_p99_s": 0.015026,
+      "max_interval_s": 0.036797346,
+      "frame_id": "imu_link",
+      "semantic_sha256": "d392ca3b291aec13a842069d096f72c5dac9726dbc4b03659d1b7fc730f09e68",
+      "ordered_payload_sha256": "a6a2c956761c35c218c5dd8ff4b2555e7a3f29edc6d85a8a3ff8c216837e793c"
+    }
+  },
+  "provenance": {
+    "recording_date": "2026-10-28",
+    "source_bag_relative_to_rm_nav": "calibration/data/intrinsics_20261028_01",
+    "imu_source": "MAVROS /mavros/imu/data_raw",
+    "inspection_tool": "spr_calibration.bags.inspect_bag with rosbags 0.11.9",
+    "scope": "Real legacy format/independence regression only; not MAVLink or formal calibration evidence"
+  }
+}

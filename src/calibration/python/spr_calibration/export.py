@@ -12,7 +12,9 @@ from .common import (CalibrationError, NOISE_KEYS, camera_chain, hash_input,
                      imu_config, read_yaml, report_html, sha256_file, transform,
                      utc_now, write_yaml)
 from .solver import baseline_provenance_errors, covariance_report, hardware_equivalence_errors, provenance_errors, session_provenance_errors
-from .profiles import DEFAULT_PROFILE, MAVLINK_PROFILE, profile_annotations, require_candidate_profile
+from .profiles import DEFAULT_PROFILE, MAVLINK_PROFILE, profile_annotations, profile_config, require_candidate_profile
+from .bags import inspect_bag
+from .validation import validate_stream_independence
 
 
 def _opencv_yaml(path, data):
@@ -97,7 +99,31 @@ def _evidence_file(item, base_directory, label):
     return path
 
 
-def validate_replay_evidence(evidence, expected_config_hash, training_hash, base_directory=None):
+def _inspect_replay_streams(bag, training_topics, profile):
+    """Verify stream equivalence/independence without claiming hardware provenance."""
+    contract = profile_config(profile)
+    imu_topic = contract["imu_topic"]
+    if not isinstance(training_topics, dict) or not all(isinstance(item, dict) for item in training_topics.values()):
+        raise CalibrationError("Replay requires the training bag topic inspection")
+    topics = {topic: item.get("type") for topic, item in training_topics.items()}
+    if (topics.get(imu_topic) != "sensor_msgs/msg/Imu" or len(topics) != 3
+            or sum(kind == "sensor_msgs/msg/Image" for kind in topics.values()) != 2):
+        raise CalibrationError(f"Replay training inspection must contain two images and {imu_topic}")
+    inspection = inspect_bag(bag, topics)
+    validate_stream_independence(inspection["topics"], training_topics, imu_topic, label="Replay")
+    for topic, observed in inspection["topics"].items():
+        rates = [item.get("rate_hz") for item in (training_topics[topic], observed)]
+        if any(isinstance(rate, bool) or not isinstance(rate, (int, float))
+               or not np.isfinite(rate) or rate <= 0 for rate in rates):
+            raise CalibrationError(f"{topic}: measured training/replay rate is missing or invalid")
+        minimum_rate = contract.get("min_rate_hz", 200.0)
+        if topic == imu_topic and min(rates) < minimum_rate:
+            raise CalibrationError(f"{profile} training/replay IMU streams must actually contain >={minimum_rate:g} Hz")
+    return inspection
+
+
+def validate_replay_evidence(evidence, expected_config_hash, training_hash, base_directory=None,
+                             *, training_topics=None, profile=None):
     if evidence.get("status") != "PASSED" or evidence.get("config_sha256") != expected_config_hash:
         raise CalibrationError("Replay evidence must pass and bind the exact OpenVINS config hash")
     if not evidence.get("bag_sha256") or evidence.get("bag_sha256") == training_hash:
@@ -130,6 +156,8 @@ def validate_replay_evidence(evidence, expected_config_hash, training_hash, base
             raise CalibrationError("Ground-truth replay requires ATE RMSE <=0.3 m")
     if base_directory is None:
         raise CalibrationError("Replay evidence must resolve its actual recorded artifacts")
+    if training_topics is None or profile is None:
+        raise CalibrationError("Replay requires training topic inspection and an explicitly selected calibration profile")
     artifacts = evidence.get("artifacts", {})
     required = ["estimated_trajectory", "replay_log", "replay_command", "evaluation_report"]
     if reference.get("source") != "none":
@@ -146,8 +174,10 @@ def validate_replay_evidence(evidence, expected_config_hash, training_hash, base
     replay_bag = Path(bag_path)
     if not replay_bag.is_absolute():
         replay_bag = Path(base_directory) / replay_bag
-    if hash_input(replay_bag) != evidence["bag_sha256"]:
+    inspection = _inspect_replay_streams(replay_bag, training_topics, profile)
+    if inspection["input_sha256"] != evidence["bag_sha256"]:
         raise CalibrationError("Replay bag does not match the evaluated input hash")
+    evidence["selected_topic_inspection"] = inspection["topics"]
     return resolved
 
 
@@ -228,7 +258,10 @@ def publish(candidate, replay_evidence, destination_root, profile=DEFAULT_PROFIL
     evidence = read_yaml(replay_evidence)
     if profile == MAVLINK_PROFILE:
         require_candidate_profile(evidence, profile)
-    replay_artifacts = validate_replay_evidence(evidence, export["config_sha256"], manifest["input_bag_sha256"], Path(replay_evidence).resolve().parent)
+    training_topics = read_yaml(candidate / "conversion.yaml")["source"]["topics"]
+    replay_artifacts = validate_replay_evidence(
+        evidence, export["config_sha256"], manifest["input_bag_sha256"],
+        Path(replay_evidence).resolve().parent, training_topics=training_topics, profile=profile)
     original_bag_path = Path(evidence["bag_path"])
     if not original_bag_path.is_absolute():
         original_bag_path = Path(replay_evidence).resolve().parent / original_bag_path
