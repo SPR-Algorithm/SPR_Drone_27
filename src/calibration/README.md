@@ -15,12 +15,11 @@ Owner: SilverWolf（框架 / VIO）。ROS 2 Humble/Jazzy 的 D435i 双目采集�
 
 ```bash
 source /opt/ros/jazzy/setup.bash
-colcon build --packages-up-to calibration --symlink-install \
-  --cmake-args -DPython3_EXECUTABLE=/usr/bin/python3
+bash build_workspace.sh --packages-up-to calibration
 source install/setup.bash
 ```
 
-C++17，依赖 OpenCV、yaml-cpp、rclcpp、sensor_msgs、message_filters。Python 离线工具的依赖见 `requirements-tools.txt`；Humble 使用相应 ROS setup 文件。
+C++20，依赖 OpenCV、yaml-cpp、rclcpp、sensor_msgs、message_filters。Python 离线工具的依赖见 `requirements-tools.txt`；Humble 使用相应 ROS setup 文件。
 
 ## 真实数据采集
 
@@ -94,4 +93,13 @@ ros2 run calibration joint_calibrate.py validate \
 
 ## 验证
 
-`colcon test --packages-select calibration` 注册棋盘图像检测、求解/导出和 Python 测试。自动测试中的生成夹具用于软件回归，不能证明真实硬件标定完成。当前实机验收必须使用连接的 D435i 和飞控记录的数据；不要把 `--self-test` 输出或测试夹具当作测量结果。
+`colcon test --packages-select calibration` 运行空采集拒绝与 Python 契约测试，不生成棋盘图像或合成标定数据。真实图像检测、求解和导出回归由 `stereo_calibration_real` 覆盖；未设置 `SPR_CALIBRATION_REAL_SESSION` 时明确跳过，设置的目录不存在或不满足默认门槛时失败。
+
+```bash
+# 指向已停止采集、满足默认门槛的真实 D435i 会话，包含 meta.yaml、index.csv、left/、right/
+export SPR_CALIBRATION_REAL_SESSION="$PWD/runs/<session>/images/<capture>"
+colcon test --packages-select calibration --event-handlers console_direct+
+colcon test-result --verbose
+```
+
+回归在临时目录求解，检查留出误差、双目覆盖、cam0→cam1 变换及协方差，并验证输入文件哈希不变。历史 `--self-test` 和渲染棋盘测试不再注册到默认测试，不用于当前验证。真实图像回归只覆盖相机标定；飞控联合标定仍须实际采集与独立留出验证。

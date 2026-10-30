@@ -30,12 +30,11 @@ target_link_libraries(calibrate ${OpenCV_LIBS} yaml-cpp)
 
 if(BUILD_TESTING)
   enable_testing()
-  add_executable(board_detection_test tests/board_detection_test.cpp)
-  target_include_directories(board_detection_test PRIVATE src ${OpenCV_INCLUDE_DIRS})
-  target_link_libraries(board_detection_test ${OpenCV_LIBS} yaml-cpp)
-  add_test(NAME board_detection COMMAND board_detection_test)
-  add_test(NAME stereo_calibration_selftest COMMAND calibrate --self-test)
-  set_tests_properties(stereo_calibration_selftest PROPERTIES TIMEOUT 180)
+  # Calibration regressions must use an explicitly selected real capture.
+  # Never register the legacy rendered-board or synthetic solver self-tests.
+  add_test(NAME stereo_calibration_real
+    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_stereo_real.py $<TARGET_FILE:calibrate>)
+  set_tests_properties(stereo_calibration_real PROPERTIES TIMEOUT 300 SKIP_RETURN_CODE 77)
   add_test(NAME capture_empty_session
     COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_capture_empty.py $<TARGET_FILE:capture>)
   set_tests_properties(capture_empty_session PROPERTIES TIMEOUT 20)

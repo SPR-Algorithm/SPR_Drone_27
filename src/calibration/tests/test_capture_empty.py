@@ -16,6 +16,7 @@ with tempfile.TemporaryDirectory(prefix="spr-empty-capture-") as directory:
          "-p", f"left_image_topic:=/test_empty/p{os.getpid()}/left",
          "-p", f"right_image_topic:=/test_empty/p{os.getpid()}/right"],
         capture_output=True, text=True, timeout=10,
+        env=dict(os.environ, ROS_LOG_DIR=str(Path(directory) / "ros_log")),
     )
     output = result.stdout + result.stderr
     assert result.returncode == 1, output
