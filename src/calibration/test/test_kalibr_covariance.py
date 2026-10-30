@@ -100,6 +100,15 @@ class KalibrCovarianceTests(unittest.TestCase):
                                BlockCholeskyLinearSystemSolver=object,
                                Optimizer2=Optimizer, SparseBlockMatrixXd=lambda: owner.hessian)
 
+    def zero_structure(self, block_index):
+        base, dimension = self.hessian.rowBaseOfBlock(block_index), self.hessian.rowsOfBlock(block_index)
+        return {"full_dimensions": [self.hessian.rows(), self.hessian.cols()],
+                "exact_zero_blocks": [{"block_index": block_index, "scalar_base": base, "dimension": dimension}],
+                "exact_zero_scalar_rows": list(range(base, base + dimension)),
+                "support_scalar_dimension": self.hessian.rows() - dimension,
+                "support_block_count": self.hessian.bRows() - 1,
+                "original_block_count": self.hessian.bRows()}
+
     def test_full_marginal_keeps_nuisance_coupling_and_requested_unsorted_order(self):
         events = []
         requested = []
@@ -145,6 +154,83 @@ class KalibrCovarianceTests(unittest.TestCase):
         covariance, _ = adapter.analytic_marginal_covariance(
             self.calibrator, backend, lambda hessian, indices: np.eye(8))
         self.assertEqual(covariance.shape, (8, 8))
+
+    def test_exact_zero_nuisance_quotient_has_transparent_support_metadata(self):
+        self.hessian.matrix[4, :] = self.hessian.matrix[:, 4] = 0.0
+        original = self.hessian.matrix.copy()
+        structure = self.zero_structure(2)
+
+        def solve_support(hessian, indices):
+            kept = [index for index in range(hessian.rows()) if index not in structure["exact_zero_scalar_rows"]]
+            lookup = {original_index: reduced_index for reduced_index, original_index in enumerate(kept)}
+            selected = [lookup[index] for index in self.scalar_indices(indices)]
+            information = hessian.matrix[np.ix_(kept, kept)]
+            return np.linalg.solve(information, np.eye(len(kept))[:, selected])[selected, :]
+
+        with patch.object(Path, "open", side_effect=AssertionError("No default diagnostic file should be written")):
+            covariance, metadata = adapter.analytic_marginal_covariance(
+                self.calibrator, self.backend([]), solve_support, hessian_structure=lambda hessian: structure)
+        np.testing.assert_array_equal(covariance, np.eye(8) * 0.5)
+        np.testing.assert_array_equal(self.hessian.matrix, original)
+        self.assertEqual(metadata["native_hessian_structure"], structure)
+        self.assertEqual(metadata["excluded_exact_zero_nuisance_coordinates"], [4])
+        self.assertEqual(metadata["excluded_exact_zero_nuisance_blocks"], structure["exact_zero_blocks"])
+        self.assertTrue(metadata["original_hessian_singular"])
+        self.assertFalse(metadata["full_nuisance_variables_marginalized"])
+        self.assertTrue(metadata["support_nuisance_variables_marginalized"])
+        self.assertEqual(metadata["support_scalar_dimension"], 8)
+        self.assertEqual(metadata["selected_block_indices"], [3, 1, 4, 0])
+        self.assertIn("inverse(H_support)", metadata["selected_inverse"])
+        self.assertNotIn("(H^-1)", metadata["selected_inverse"])
+        self.assertIn("not an inverse or proper marginal covariance of the singular original Hessian", metadata["interpretation"])
+
+    def test_selected_exact_zero_block_is_refused_before_selected_solve(self):
+        structure = self.zero_structure(4)
+        self.hessian.matrix[8, :] = self.hessian.matrix[:, 8] = 0.0
+        native = Mock()
+        with self.assertRaisesRegex(RuntimeError, "Selected.*exact-zero"):
+            adapter.analytic_marginal_covariance(self.calibrator, self.backend([]), native,
+                                                 hessian_structure=lambda hessian: structure)
+        native.assert_not_called()
+
+    def test_structure_diagnostic_is_written_before_support_factorization_failure(self):
+        structure = self.zero_structure(2)
+        opened = mock_open()
+
+        def failing_factorization(hessian, indices):
+            written = "".join(call.args[0] for call in opened.return_value.write.call_args_list)
+            diagnostic = yaml.safe_load(written)
+            self.assertEqual(diagnostic["diagnostic_stage"], "before_selected_factorization")
+            self.assertTrue(diagnostic["original_hessian_singular"])
+            self.assertEqual(diagnostic["native_hessian_structure"], structure)
+            self.assertEqual(diagnostic["support_scalar_dimension"], 8)
+            self.assertFalse(diagnostic["support_factorization_performed"])
+            self.assertIsNone(diagnostic["selected_inverse"])
+            self.assertNotIn("validation", diagnostic)
+            raise RuntimeError("remaining support is singular")
+
+        with patch.object(Path, "open", opened):
+            with self.assertRaisesRegex(RuntimeError, "remaining support is singular"):
+                adapter.analytic_marginal_covariance(
+                    self.calibrator, self.backend([]), failing_factorization,
+                    hessian_structure=lambda hessian: structure, diagnostic_path="uncreated_structure.yaml")
+        opened.assert_called_once_with("w", encoding="utf-8")
+
+    def test_partial_zero_rows_are_not_removed_or_accepted(self):
+        structure = {"full_dimensions": [9, 9], "exact_zero_blocks": [],
+                     "exact_zero_scalar_rows": [5], "support_scalar_dimension": 9}
+        native = Mock()
+        with self.assertRaisesRegex(RuntimeError, "partial exact-zero rows"):
+            adapter.analytic_marginal_covariance(self.calibrator, self.backend([]), native,
+                                                 hessian_structure=lambda hessian: structure)
+        native.assert_not_called()
+
+    def test_structure_cannot_omit_nonzero_coordinates_by_changing_support_dimension(self):
+        structure = self.zero_structure(2)
+        structure["support_scalar_dimension"] = 7
+        with self.assertRaisesRegex(RuntimeError, "support dimension"):
+            adapter.analytic_marginal_covariance(self.calibrator, self.backend([]), Mock(),
+                                                 hessian_structure=lambda hessian: structure)
 
     def test_inactive_wrong_dimension_duplicate_and_nonunit_blocks_are_rejected(self):
         for attribute, value, message in (("active", False, "inactive"), ("dimension", 2, "dimension mismatch"),
@@ -215,13 +301,16 @@ class KalibrCovarianceTests(unittest.TestCase):
         covariance = np.diag(np.arange(1.0, 9.0))
         self.calibrator.saveCamChainParametersYaml = Mock()
         module = SimpleNamespace(aopt=object())
-        extension = SimpleNamespace(marginal_covariance=object())
+        extension = SimpleNamespace(marginal_covariance_on_support=object(), hessian_structure=object())
         opened = mock_open()
         with patch.object(adapter.importlib, "import_module", side_effect=[module, extension]), \
-                patch.object(adapter, "analytic_marginal_covariance", return_value=(covariance, {"control_metadata": True})), \
+                patch.object(adapter, "analytic_marginal_covariance", return_value=(covariance, {"control_metadata": True})) as compute, \
                 patch.object(adapter.np, "save") as save, patch.object(Path, "open", opened), redirect_stdout(StringIO()):
             adapter.recover_covariance(self.calibrator)
         save.assert_called_once()
+        compute.assert_called_once_with(self.calibrator, module.aopt, extension.marginal_covariance_on_support,
+                                        hessian_structure=extension.hessian_structure,
+                                        diagnostic_path=Path("/data/covariance_structure.yaml"))
         self.assertEqual(save.call_args.args[0], "/data/joint_covariance.npy")
         np.testing.assert_allclose(self.calibrator.std_trafo_ic**2, np.arange(1.0, 7.0))
         np.testing.assert_allclose(self.calibrator.std_times**2, [7.0, 8.0])

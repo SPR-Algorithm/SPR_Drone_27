@@ -4,7 +4,7 @@ import unittest
 
 import aslam_backend as backend
 import numpy as np
-from spr_kalibr_covariance import marginal_covariance
+from spr_kalibr_covariance import hessian_structure, marginal_covariance, marginal_covariance_on_support
 
 
 def block_matrix(values, layout):
@@ -62,6 +62,33 @@ class MarginalCovarianceTests(unittest.TestCase):
         hessian.setBlock(14362, 14362, np.array([[3.]]))
         actual = np.asarray(marginal_covariance(hessian, [58498, 0, 14362]))
         np.testing.assert_allclose(actual, np.diag([.5, 1., 1. / 3.]), atol=1e-12)
+
+    def test_only_exactly_uncoupled_unused_nuisance_blocks_can_be_quotiented(self):
+        full = np.zeros((5, 5))
+        full[:4, :4] = self.full
+        hessian = block_matrix(full, [1, 3, 4, 5])
+        structure = hessian_structure(hessian)
+        self.assertEqual(structure['exact_zero_blocks'], [{'block_index': 3, 'scalar_base': 4, 'dimension': 1}])
+        self.assertEqual(structure['exact_zero_scalar_rows'], [4])
+        self.assertEqual(structure['support_scalar_dimension'], 4)
+        actual = np.asarray(marginal_covariance_on_support(hessian, [2, 0]))
+        np.testing.assert_allclose(actual, np.linalg.inv(self.full)[np.ix_([3, 0], [3, 0])], atol=1e-12)
+
+    def test_requested_zero_information_cannot_be_quotiented_away(self):
+        hessian = block_matrix(np.diag([1., 0.]), [1, 2])
+        with self.assertRaisesRegex(RuntimeError, 'calibration block'):
+            marginal_covariance_on_support(hessian, [1])
+
+    def test_coupled_null_directions_are_not_pruned(self):
+        hessian = block_matrix(np.ones((2, 2)), [1, 2])
+        self.assertEqual(hessian_structure(hessian)['exact_zero_blocks'], [])
+        with self.assertRaises(RuntimeError):
+            marginal_covariance_on_support(hessian, [0])
+
+    def test_weak_nonzero_information_is_retained(self):
+        hessian = block_matrix(np.diag([1., 1e-15]), [1, 2])
+        self.assertEqual(hessian_structure(hessian)['exact_zero_blocks'], [])
+        np.testing.assert_allclose(marginal_covariance_on_support(hessian, [1]), [[1e15]], rtol=1e-12)
 
 
 if __name__ == "__main__":

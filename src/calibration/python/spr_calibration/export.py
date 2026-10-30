@@ -316,8 +316,9 @@ def publish(candidate, replay_evidence, destination_root, profile=DEFAULT_PROFIL
                      "conversion.yaml", "target.yaml", "command.yaml", "kalibr.log", "kalibr_covariance_entry.py",
                      "session_manifest.yaml"):
             shutil.copyfile(candidate / name, output / name)
-        if "covariance_method.yaml" in hashes:
-            shutil.copyfile(candidate / "covariance_method.yaml", output / "covariance_method.yaml")
+        for diagnostic in ("covariance_method.yaml", "covariance_structure.yaml"):
+            if diagnostic in hashes:
+                shutil.copyfile(candidate / diagnostic, output / diagnostic)
         shutil.copytree(candidate / "openvins", output / "openvins")
         shutil.copytree(candidate / "validation", output / "validation")
         artifact_root = output / "validation" / "replay_artifacts"

@@ -373,7 +373,7 @@ def solve(bag, camchain, imu, output, image=DEFAULT_KALIBR_IMAGE, session_manife
                         completed_utc=utc_now())
         manifest["artifact_sha256"] = {name: sha256_file(output / name) for name in (
             "camchain.yaml", "imu.yaml", "target.yaml", "kalibr_imucam_chain.yaml",
-            "joint_covariance.npy", "covariance_method.yaml", "uncertainty.yaml", "report.pdf", "conversion.yaml",
+            "joint_covariance.npy", "covariance_method.yaml", "covariance_structure.yaml", "uncertainty.yaml", "report.pdf", "conversion.yaml",
             "command.yaml", "kalibr_covariance_entry.py")}
         if session_manifest:
             manifest["artifact_sha256"]["session_manifest.yaml"] = sha256_file(output / "session_manifest.yaml")
