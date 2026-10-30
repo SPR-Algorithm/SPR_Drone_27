@@ -189,7 +189,8 @@ def record(args):
         import rclpy
         rclpy.init()
         ros_started = True
-        probe = SensorProbe(rig, camera, imu)
+        probe = SensorProbe(rig, camera, imu,
+                            allan_sampling=mavlink and args.mode == "allan")
         beginning = time.monotonic()
         deadline = beginning + rig["record"]["startup_timeout_s"]
         last_error = "no data"

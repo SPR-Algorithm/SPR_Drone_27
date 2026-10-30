@@ -10,6 +10,32 @@ import numpy as np
 from .common import CalibrationError, finite_positive
 
 
+def require_allan_sampling(stamps_ns):
+    """Apply the same measured-cadence gate before capture and offline fitting.
+
+    This does not establish stationarity, recording duration or noise values.
+    Timestamps are neither resampled nor sorted to make a stream pass.
+    """
+    stamps = np.asarray(stamps_ns, dtype=np.int64)
+    if stamps.ndim != 1 or len(stamps) < 100:
+        raise CalibrationError("Allan sampling readiness requires >=100 timestamps")
+    intervals = np.diff(stamps).astype(float) / 1e9
+    if stamps[0] <= 0 or np.any(intervals <= 0):
+        raise CalibrationError("Allan sampling timestamps must be positive and strictly increasing")
+    period = float(np.median(intervals))
+    gap = float(np.max(intervals))
+    jitter = float(np.quantile(np.abs(intervals - period), 0.99))
+    metrics = {"sample_count": len(stamps), "median_period_s": period,
+               "max_gap_s": gap, "max_gap_periods": gap / period,
+               "p99_jitter_s": jitter, "p99_jitter_periods": jitter / period}
+    if gap > 1.5 * period or jitter > 0.1 * period:
+        raise CalibrationError(
+            "Allan requires uniform sampling: gaps <=1.5x period, p99 jitter <=10%; "
+            f"measured median={period:.9g}s, max_gap={gap:.9g}s ({gap / period:.6g}x), "
+            f"p99_jitter={jitter:.9g}s ({100 * jitter / period:.6g}%); do not silently resample")
+    return metrics
+
+
 def overlapping_allan(samples, dt, cluster_sizes=None):
     values = np.asarray(samples, dtype=float)
     if values.ndim == 1:
@@ -67,13 +93,11 @@ def analyze_allan(stamps_ns, values, min_duration_s=3600.0, imu_topic="/spr/imu"
     stamps_ns, values = np.asarray(stamps_ns, dtype=np.int64), np.asarray(values, dtype=float)
     if values.shape != (len(stamps_ns), 6) or len(stamps_ns) < 100:
         raise CalibrationError("IMU input requires Nx6 [gyro_xyz,accel_xyz] samples")
-    intervals = np.diff(stamps_ns).astype(float) / 1e9
     duration = float((stamps_ns[-1] - stamps_ns[0]) / 1e9)
     if duration < min_duration_s:
         raise CalibrationError(f"Static Allan recording is {duration:.1f}s; >= {min_duration_s:.1f}s required")
-    dt = float(np.median(intervals))
-    if np.any(intervals <= 0) or np.max(intervals) > 1.5 * dt or np.quantile(np.abs(intervals - dt), 0.99) > 0.1 * dt:
-        raise CalibrationError("Allan requires uniform sampling: gaps <=1.5x period, p99 jitter <=10%; do not silently resample")
+    sampling = require_allan_sampling(stamps_ns)
+    dt = sampling["median_period_s"]
     gyro, accel = values[:, :3], values[:, 3:]
     accel_norm = np.linalg.norm(np.mean(accel, axis=0))
     if not 9.0 <= accel_norm <= 10.6 or np.linalg.norm(np.mean(gyro, axis=0)) > 0.05:
@@ -98,6 +122,7 @@ def analyze_allan(stamps_ns, values, min_duration_s=3600.0, imu_topic="/spr/imu"
     result = {"status": "FAILED" if failures else "PASSED", "duration_s": duration,
               "minimum_duration_s": min_duration_s, "formal_duration": duration >= 3600,
               "update_rate_hz": 1 / dt, "sample_count": len(values),
+              "sampling": sampling,
               "mean_acceleration_norm_m_s2": float(accel_norm),
               "fits": fits, "failures": failures,
               "tau_s": tau.tolist(), "allan_deviation": deviation.tolist(),

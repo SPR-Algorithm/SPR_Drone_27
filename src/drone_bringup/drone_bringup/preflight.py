@@ -17,7 +17,8 @@ def stream_metrics(samples, now_ns):
             "max_gap_s": max(gaps), "age_s": (now_ns - stamps[-1]) / 1e9}
 
 
-def validate_streams(samples, rig, now_ns, include_camera=True, include_imu=True):
+def validate_streams(samples, rig, now_ns, include_camera=True, include_imu=True,
+                     allan_sampling=False):
     result = {}
     topics = {}
     if include_camera:
@@ -42,6 +43,10 @@ def validate_streams(samples, rig, now_ns, include_camera=True, include_imu=True
         else:
             if any(s["frame_id"] != cfg["frame_id"] or not s["valid"] for s in observations):
                 raise ValueError(f"{topic}: invalid IMU frame or numeric payload")
+            if allan_sampling:
+                from spr_calibration.allan import require_allan_sampling
+                metrics["allan_sampling"] = require_allan_sampling(
+                    [s["stamp_ns"] for s in observations])
         result[topic] = metrics
     if include_camera:
         left = [s["stamp_ns"] for s in samples[rig["camera"]["left_image_topic"]]]
@@ -66,7 +71,7 @@ def validate_streams(samples, rig, now_ns, include_camera=True, include_imu=True
 
 
 class SensorProbe:
-    def __init__(self, rig, include_camera, include_imu):
+    def __init__(self, rig, include_camera, include_imu, allan_sampling=False):
         import rclpy
         from diagnostic_msgs.msg import DiagnosticArray
         from sensor_msgs.msg import Image, CameraInfo, Imu
@@ -75,6 +80,7 @@ class SensorProbe:
         self.rig = rig
         self.camera = include_camera
         self.imu = include_imu
+        self.allan_sampling = allan_sampling
         self.samples = {}
         self.sync = {}
         self.subscriptions = []
@@ -193,7 +199,8 @@ class SensorProbe:
                                  "mavlink_calibration" else "px4_bridge")
                 if endpoints[0].node_name != expected_node:
                     raise ValueError(f"{topic}: source is not {expected_node}")
-        result = validate_streams(recent, self.rig, now, self.camera, self.imu)
+        result = validate_streams(recent, self.rig, now, self.camera, self.imu,
+                                  allan_sampling=self.allan_sampling)
         if self.imu:
             if not self.sync or self.sync["level"] != 0:
                 raise ValueError("no healthy selected IMU source time diagnostic")

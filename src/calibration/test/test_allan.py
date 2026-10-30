@@ -4,11 +4,26 @@ import unittest
 
 import numpy as np
 
-from spr_calibration.allan import analyze_allan, fit_power_law, overlapping_allan
+from spr_calibration.allan import (analyze_allan, fit_power_law, overlapping_allan,
+                                   require_allan_sampling)
 from spr_calibration.common import CalibrationError
 
 
 class AllanContractTests(unittest.TestCase):
+    def test_sampling_metrics_on_constant_clock_intervals(self):
+        # Arithmetic-only clock units; no IMU measurements/noise are generated.
+        metrics = require_allan_sampling(np.arange(100, dtype=np.int64) * 5_000_000 + 1)
+        self.assertEqual(metrics["sample_count"], 100)
+        self.assertEqual(metrics["median_period_s"], 0.005)
+        self.assertEqual(metrics["max_gap_periods"], 1.0)
+        self.assertEqual(metrics["p99_jitter_periods"], 0.0)
+
+    def test_sampling_requires_enough_positive_increasing_timestamps(self):
+        for stamps in ([1, 2], [0] * 100, [1] * 100):
+            with self.subTest(stamps=stamps[:2]):
+                with self.assertRaises(CalibrationError):
+                    require_allan_sampling(stamps)
+
     def test_short_static_recording_cannot_pass_formal_gate(self):
         ns = np.arange(200, dtype=np.int64) * 10_000_000 + 1
         with self.assertRaisesRegex(CalibrationError, ">="):

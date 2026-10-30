@@ -47,6 +47,8 @@ ros2 run tools spr record --profile mavlink_calibration --mode joint --duration 
 
 另录一段独立的 `joint` 会话作留出集，目标同样保持固定。避开棋盘对称姿态翻转和运动模糊。保存原始 rosbag2；PNG/CSV 是派生数据。不要把同一录包复制、改 metadata 或重新封装后当作留出数据。
 
+MAVLink `allan` 模式在预检及录制中使用与离线分析相同的采样间隔门槛：至少 100 个实际时间戳，最大间隔 ≤1.5 倍中位周期，p99 绝对抖动 ≤10% 中位周期。实测平均频率 ≥140 Hz 仍可能不满足这些要求；不要录满一小时后才检查，也不要通过补点或重采样使数据通过。`joint`/`imu` 模式保留各自频率与连续性检查，运动标定可先行录制；采样检查通过也不等于已证明静止时长、噪声或联合标定有效。
+
 正式采集要求可复现且已提交的 Git 基线。`git.effective_clean` 只允许一条例外：根仓库其余部分干净，OpenVINS gitlink/HEAD 固定在约定基线，实际 diff、两个补丁和六个修改文件的哈希全部与 [兼容补丁](../docker/openvins/README.md) 一致；任何其他修改、暂存或未跟踪文件仍然拒绝。manifest 保留原始 Git status 和 `approved_patches`，不会隐去补丁状态。源码调试可显式使用 `--experimental`；旧数据不会在提交后被追认为正式采集。MAVLink 流程要求实际 `mavlink_timesync` 诊断；原 DDS 流程仍要求自己的 DDS 同步证据，不能靠切换 profile 或重命名话题补齐。
 
 每个 run 的 manifest 包含实际完成录包的文件哈希。相机参数在启动后及结束前通过 `/camera/get_parameters` 读回，并与 rig、实际驱动包版本比对；配置请求本身不等于观测证明。飞控记录实际 `timesync_snapshot`、采集程序 commit、频率、样本语义和时钟映射不确定度。MAVLink 采集器已将 header 映射到主机；离线转换保留 header，不再次添加 `T_host_px4`。DDS 时间约定仍见 [time.md](time.md)。

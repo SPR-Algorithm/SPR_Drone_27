@@ -10,5 +10,7 @@ if(BUILD_TESTING)
   ament_add_pytest_test(test_mavlink_time test/test_mavlink_time.py APPEND_ENV PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR})
   ament_add_pytest_test(test_mavlink_contract test/test_mavlink_contract.py APPEND_ENV PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR})
   ament_add_pytest_test(test_mavlink_interval test/test_mavlink_interval.py APPEND_ENV PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR})
+  ament_add_pytest_test(test_allan_preflight test/test_allan_preflight.py
+    APPEND_ENV PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR}:${CMAKE_CURRENT_SOURCE_DIR}/../calibration/python:${CMAKE_CURRENT_SOURCE_DIR}/../diagnostics)
 endif()
 ament_package()
