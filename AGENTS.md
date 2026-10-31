@@ -1,40 +1,220 @@
 # Repository Guidelines
 
-## Project Structure & Module Organization
+## 1. Project Principles
 
-`Project.md` and recorded ADRs define the contract. ROS 2 packages belong in `src/`. `calibration` provides stereo and camera–IMU tools; `drone_bringup` owns devices and rig configuration. DDS in `px4_bridge` is currently frozen; use the MAVLink calibration profile. Preserve pinned `src/open_vins/`. Keep instructions in `docs/`, decisions in `docs/adr/`, and generated data outside Git. Historical captures remain in `calibration/data/`.
+本项目由开发者主导设计、开发和维护，AI Agent 作为辅助开发工具。
 
-## Build, Test, and Development Commands
+项目优先保证代码的**正确性、可读性、可维护性和易调试性**，而非追求过度抽象、自动化或完整的测试覆盖率。
 
-Run from the repository root using Bash:
+- 优先理解现有代码和项目需求，再进行修改。
+- 遵循已有架构，不随意重构无关模块。
+- 以最小必要修改完成任务，避免引入不必要的依赖和复杂设计。
+- 优先复用现有实现及成熟的开源工具。
+- 不为未来尚未确定的需求提前创建框架、接口或模块。
+- 保持代码适合人工阅读、调试和后续扩展。
+- 不擅自扩大任务范围；发现其他问题时可以说明，但不默认一并修改。
 
-```bash
-git submodule update --init --recursive
-source /opt/ros/jazzy/setup.bash
-colcon build --symlink-install --cmake-args -DPython3_EXECUTABLE=/usr/bin/python3
-source install/setup.bash
-colcon test --event-handlers console_direct+
-colcon test-result --verbose
-ros2 run tools spr check-rig
+## 2. Project Structure and Architecture
+
+`Project.md` 描述项目目标、功能需求和系统架构。`README.md` 提供项目介绍、构建与使用说明。重要架构决策可记录在 `docs/adr/`。
+
+以当前实际仓库结构为准，不要求为了匹配目录模板而移动已有代码。
+
+### Module Responsibilities
+
+- `src/`：ROS 2 功能包、节点和业务代码。
+- `drone_bringup/`：设备配置、启动文件和系统运行场景。
+- `calibration/`：相机标定、相机—IMU 联合标定等功能。
+- `px4_bridge/`：飞控通信、消息处理和协议适配。
+- `open_vins/`：外部 VIO 算法及其原有代码。
+- `localization/`：项目专用定位接入与数据处理，按实际需要建立。
+- `navigation/`：导航任务、轨迹跟随和导航决策，按实际需要建立。
+- `tools/`：实际需要共享的工具及辅助功能。
+- `scripts/`：数据处理、调试和实验辅助脚本。
+- `docs/`：操作说明、接口约定及必要的开发文档。
+
+### Architecture Rules
+
+- 每个模块应有明确职责，避免相同功能在多个模块重复实现。
+- 业务算法、硬件接口和系统启动逻辑尽量保持独立。
+- 优先使用简单、直接的模块调用方式。
+- 避免无必要的继承层次、工厂、注册器和通用框架。
+- 只有存在明确的复用需求时，才提取公共组件。
+- 新功能优先放在职责匹配的现有模块中，确有需要时再增加功能包。
+- 不随意修改第三方库、Git 子模块及其版本。
+
+## 3. Coding Style and Readability
+
+### C++
+
+- 项目自主维护的 C++ 代码统一使用 **C++17 标准**。
+- CMake 构建目标应明确要求 C++17，启用 `CXX_STANDARD_REQUIRED`，避免静默回退到更低标准。
+- 不主动引入 C++20 或更新标准中的专属特性。
+- 使用两个空格缩进。
+- 类型和类名使用 `PascalCase`。
+- 私有成员变量使用尾下划线。
+- 其他命名遵循所在模块的现有习惯。
+- 对 GCC/Clang 启用 `-Wall -Wextra -Wpedantic`。
+- 尽量使用 C++17 标准库和现有依赖，不重复实现基础功能。
+- 保持函数和类的职责清晰，避免不必要的复杂抽象。
+
+项目自主维护的 CMake 目标可采用：
+
+```cmake
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
 ```
 
-The explicit Python path avoids selecting a user-installed interpreter without ROS dependencies. Use the corresponding Humble setup on the target computer. Current calibration validation uses real captures; consult package READMEs before hardware launches and select tests accordingly.
+也可以针对具体目标设置对应属性。
 
-## Coding Style and Naming Conventions
+第三方代码保留原有格式、许可证、版本及其构建要求。如果外部依赖的语言标准与项目要求不同，应优先保持目标间的兼容性，不擅自修改上游代码或子模块指针。
 
-- All C++ code across the entire repository must use the **C++20 standard**. Configure CMake targets and build settings consistently to require C++20.
-- C++ code uses two-space indentation, `PascalCase` for types, and trailing underscores for private member variables.
-- Enable `-Wall -Wextra -Wpedantic` for C++ compilation.
-- Python code uses four-space indentation and `snake_case` naming conventions. The existing Python coding standard remains unchanged.
-- Keep ROS 2 package names lowercase.
-- Follow the conventions of existing helper functions and modules rather than reformatting unrelated code.
-- No repository-wide formatter is currently established.
-- Preserve OpenVINS' upstream layout, licenses, and existing language-specific formatting conventions. Do not reformat unrelated upstream code. Where repository-wide C++20 requirements conflict with the pinned OpenVINS revision or its build requirements, document the compatibility issue and resolve it explicitly rather than silently modifying upstream code or submodule pointers.
+### Python
 
-## Testing Guidelines
+- 使用四个空格缩进。
+- 函数和变量采用 `snake_case`。
+- 保持项目已有的 Python 编码标准和依赖环境。
+- 不为局部任务引入新的代码格式化或依赖管理体系。
 
-Register meaningful regressions with CTest/ament so `colcon test` discovers them. Name Python tests `test_*.py`. Check actual 8×11 inner-corner boards with 0.025 m squares, calibration recovery, invalid inputs, transform directions, and time-offset signs. No numerical coverage percentage is established. Use captured images and bags for requested validation; do not generate synthetic calibration datasets. Report hardware, profile, thresholds, and remaining unverified requirements.
+### Readability
 
-## Commit & Pull Request Guidelines
+- 优先选择容易理解的实现，而不是过度追求代码简短或抽象程度。
+- 使用清晰的变量名和函数名。
+- 注释重点说明算法原理、设计原因和特殊处理，不逐行重复代码含义。
+- 涉及坐标变换、角度、时间戳及物理量时，明确坐标系、单位、方向和时间基准。
+- 避免隐藏的全局状态、无意义的多层封装和不必要的数据转换。
+- 不格式化无关文件，不为统一风格重写已经正常工作的代码。
 
-History currently starts with `init`; no scoped convention is established. Use imperative, scoped messages such as `calibration: validate stereo coverage`. PRs should explain the problem, behavior, tests, and requirement IDs. Record contract changes in an ADR; update schemas and documentation together. Make submodule revisions explicit.
+## 4. Dependencies and Utilities
+
+优先复用 ROS 2、标准库和项目已有的成熟工具。
+
+- 日志优先使用 ROS 2 日志机制。
+- ROS 参数和节点配置优先使用现有参数机制。
+- 坐标变换使用 Eigen、tf2 或项目已有数学工具。
+- 数据录制和回放优先使用 rosbag2。
+- 配置文件优先使用现有 YAML 解析方式。
+- 状态估计与飞行控制优先复用 OpenVINS、PX4 等已有能力。
+
+已有数学工具应优先复用，不因项目迁移而重复编写。
+
+只有在实际功能需要时才增加工具函数。模块内部使用的辅助函数优先保留在模块内，不强制集中到 `tools/`。
+
+不要为了目录完整性而预先开发 Logger、ConfigManager、EKF、PID、Recorder 等通用框架。
+
+## 5. Testing and Functional Validation
+
+### Testing Philosophy
+
+本项目以**完整、可独立运行的功能**作为默认测试单位。
+
+测试主要服务开发者进行功能检查、调试与验收，不要求对每个类或函数分别建立自动化单元测试。
+
+典型功能测试包括：
+
+- 相机采集与显示
+- 数据录制与回放
+- 相机及 IMU 标定
+- 传感器数据接收
+- VIO 定位
+- 飞控通信
+- 导航与轨迹跟随
+
+### Testing Organization
+
+- 按完整功能组织测试入口，而不是按内部函数机械拆分。
+- 测试可以是独立可执行程序、ROS 2 节点、launch 文件或脚本。
+- 测试应尽量复用实际业务实现，避免编写独立的测试专用算法。
+- 每个测试入口应明确用途、运行方式、输入条件和需要观察的结果。
+- 优先复用现有测试，不重复创建功能相同的测试程序。
+- 不强制使用 GoogleTest、CTest 或 `colcon test`。
+- 对需要人工观察的功能，允许通过图像、日志、数据或可视化结果进行检查。
+
+### Testing Scope
+
+测试范围由功能完成情况、实际修改内容及其影响决定。
+
+- 完成一个新功能模块后，根据需要建立或使用对应的功能测试入口。
+- 修改模块主要行为时，优先使用已有功能测试验证。
+- 普通局部修改只进行必要的构建和检查。
+- 纯文档、注释和非功能性修改不要求执行程序测试。
+- 不因修改一个模块而默认执行全部模块的测试。
+- 不要求每次修改都增加新的测试代码。
+- 不以单元测试数量、代码覆盖率或自动化程度作为开发质量的唯一评价标准。
+- 特定错误确实需要独立回归测试时，可以增加针对性测试。
+- 不为方便测试而引入复杂的 mock、依赖注入或额外抽象层。
+
+### Validation Boundaries
+
+- 优先执行与当前任务相关、能够实际运行的检查。
+- 不默认启动完整 ROS 2 系统、全部 bag 回放、SITL、HITL 或真实硬件测试。
+- 设备或数据不可用时，说明相应功能未验证，不为完成测试而伪造数据。
+- 真实标定效果应通过真实采集验证；简单数学与配置检查可以使用确定的测试输入。
+- 区分构建成功、功能运行正常、性能或精度达到验收要求。
+- 不通过删除测试、修改预期结果或放宽既定标准来掩盖问题。
+- 完成必要验证后即可结束，不追加与任务无关的测试。
+
+## 6. Build and Development
+
+使用项目 README 中记录的实际开发环境与构建方式。
+
+对于 ROS 2 项目：
+
+- 按目标环境选择正确的 ROS 2 发行版。
+- 使用 `colcon` 构建 ROS 2 功能包。
+- 项目自主维护的 C++ 构建目标采用 C++17。
+- 优先构建当前修改涉及的包及必要依赖。
+- 不默认执行整个工作空间的重复构建。
+- 使用已有功能测试或调试入口进行按需验证。
+- `colcon test` 仅用于项目实际注册且本次需要运行的自动化测试，不作为每次修改的固定步骤。
+- 不混用不同 ROS 2 发行版生成的构建产物。
+- 不随意更换 Python 解释器、编译器、依赖版本或 Git 子模块版本。
+
+如果编译、依赖或环境存在问题，应先确定原因，不通过无关的全局修改强行修复。
+
+## 7. Hardware and Safety Boundaries
+
+涉及真实硬件的操作应区分开发检查与实际运行验证。
+
+- 普通代码开发不自动授权解锁、起飞或控制真实无人机。
+- 不擅自修改飞控固件、安全参数和关键控制配置。
+- 离线调试、数据回放和真实设备运行应有明确的运行边界。
+- 硬件测试根据实际需要由开发者安排，Agent 不强制要求每次修改后进行上机验证。
+- 涉及控制、坐标、时间同步或状态估计的关键问题，应明确未验证的风险，不能仅凭编译通过认定可安全部署。
+
+## 8. Documentation and Version Control
+
+- README 主要说明项目结构、依赖、构建方式和运行入口。
+- 模块文档重点说明用途、主要接口、配置和必要调试方式。
+- 只有接口、配置语义、操作步骤或架构发生实际变化时，才更新相应文档。
+- 不为普通代码修改自动生成大量分析报告或 ADR。
+- 构建输出、日志、临时文件和新增原始采集数据默认不提交 Git，除非项目明确要求。
+- 保留已有数据、配置和历史记录，不覆盖无关内容。
+- Commit 信息简洁明确，说明修改的模块与目的。
+- PR 应说明主要变更、相关验证及必要的已知限制。
+
+## 9. Agent Workflow and Handoff
+
+Agent 执行开发任务时，遵循以下工作方式：
+
+1. **Understand**：理解需求，阅读相关代码、配置及必要文档。
+2. **Implement**：在现有架构内完成最小必要修改。
+3. **Verify**：按实际影响进行局部构建或相关功能验证。
+4. **Report**：简要说明修改内容、验证结果及仍需人工处理的问题。
+
+除非任务明确要求：
+
+- 不开展无关重构。
+- 不主动扩展功能。
+- 不自动增加大量测试。
+- 不新增复杂基础设施。
+- 不修改第三方代码和子模块版本。
+- 不代替开发者完成未经授权的实机操作。
+
+最终报告保持简洁、准确，重点说明：
+
+- **Changes**：修改了什么。
+- **Validation**：实际检查了什么及其结果。
+- **Remaining**：与本次工作相关的未完成验证或限制。
+
+项目最终由开发者负责理解、维护和验收。Agent 应帮助减少重复劳动，而不是增加额外的开发和测试负担。
