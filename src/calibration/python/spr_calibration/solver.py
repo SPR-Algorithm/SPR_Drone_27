@@ -80,12 +80,20 @@ def provenance_errors(manifest, camera_required=True, profile=DEFAULT_PROFILE):
             try:
                 uncertainty = float(snapshot["sync_uncertainty_us"])
                 snapshot_offset = float(snapshot["host_minus_px4_offset_us"]) / 1e6
-                if not np.isfinite(uncertainty) or not 0 <= uncertainty <= 1000:
-                    errors.append("Measured IMU time uncertainty exceeds 1 ms")
+                budget = 1000.0
+                if profile == DEFAULT_PROFILE:
+                    # Older DDS recordings predate the explicit run budget.
+                    recorded_budget = snapshot.get("sync_budget_us", 1000.0)
+                    if isinstance(recorded_budget, bool):
+                        raise ValueError("a boolean is not a synchronization budget")
+                    budget = float(recorded_budget)
+                if (not np.isfinite(budget) or budget <= 0 or not np.isfinite(uncertainty)
+                        or not 0 <= uncertainty <= budget):
+                    errors.append("Measured IMU time uncertainty must be finite, nonnegative and within a finite positive sync budget")
                 if not np.isfinite(snapshot_offset) or not isinstance(offset, (float, int)) or abs(offset - snapshot_offset) > 1e-9:
                     errors.append("Recorded T_host_px4 offset disagrees with the diagnostic snapshot")
             except (KeyError, TypeError, ValueError):
-                errors.append("Measured IMU timing uncertainty/offset fields are missing")
+                errors.append("Measured IMU timing uncertainty/offset/budget fields are missing or invalid")
     if imu.get("bridge_code_dirty") is not False:
         errors.append("IMU bridge must have a recorded clean Git baseline")
     if profile == MAVLINK_PROFILE:
@@ -191,19 +199,25 @@ def baseline_provenance_errors(baseline):
         try:
             from spr_diagnostics.run import (
                 OPENVINS_APPROVED_PATCHES, OPENVINS_BASE,
-                OPENVINS_COMBINED_DIFF_SHA256, OPENVINS_PATCHED_FILES,
+                OPENVINS_COMBINED_DIFF_SHA256, OPENVINS_LEGACY_CXX20_PATCH,
+                OPENVINS_PATCHED_FILES,
             )
         except ImportError as error:
             raise CalibrationError("Source diagnostics package is required to verify approved compatibility patches") from error
         patch = baseline.get("approved_patches", {}).get("open_vins", {})
+        current_patch = {
+            "base_commit": OPENVINS_BASE,
+            "patches": [{"path": name, "sha256": digest}
+                        for name, digest in OPENVINS_APPROVED_PATCHES.items()],
+            "diff_sha256": OPENVINS_COMBINED_DIFF_SHA256,
+            "patched_files_sha256": OPENVINS_PATCHED_FILES,
+        }
         # Porcelain v1 deliberately reports submodule content changes as M;
         # unlike `git status --short`, it does not retain the lowercase m.
+        # Historical recordings retain the exact reviewed C++20 provenance.
+        # Accepting their metadata does not approve that patch for new captures.
         if (str(baseline["status"]).strip() != "M src/open_vins"
-                or patch.get("base_commit") != OPENVINS_BASE
-                or patch.get("patches") != [{"path": name, "sha256": digest}
-                                           for name, digest in OPENVINS_APPROVED_PATCHES.items()]
-                or patch.get("diff_sha256") != OPENVINS_COMBINED_DIFF_SHA256
-                or patch.get("patched_files_sha256") != OPENVINS_PATCHED_FILES):
+                or patch not in (current_patch, OPENVINS_LEGACY_CXX20_PATCH)):
             errors.append("Git dirt is not the exact reviewed OpenVINS compatibility exception")
     return errors
 

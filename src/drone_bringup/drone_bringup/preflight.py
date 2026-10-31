@@ -3,6 +3,8 @@ from collections import deque
 import math
 import time
 
+from .mavlink_contract import diagnostic_snapshot
+
 
 def stream_metrics(samples, now_ns):
     if len(samples) < 2:
@@ -121,15 +123,14 @@ class SensorProbe:
         self.samples[topic].append(data)
 
     def diagnostic(self, msg):
+        expected_name = ("drone_bringup/mavlink_imu"
+                         if self.rig.get("calibration_profile") == "mavlink_calibration"
+                         else "px4_bridge/imu")
         for status in msg.status:
-            if self.rig.get("calibration_profile") == "mavlink_calibration":
-                if status.name == "drone_bringup/mavlink_imu":
-                    from .mavlink_contract import diagnostic_snapshot
-                    self.sync = diagnostic_snapshot(status, self.node.get_clock().now().nanoseconds)
-            elif "px4_bridge" in status.name:
-                self.sync = {v.key: v.value for v in status.values}
-                self.sync.update(level=status.level, message=status.message,
-                                 received_at_ns=self.node.get_clock().now().nanoseconds)
+            if status.name == expected_name:
+                # ROS distributions expose DiagnosticStatus.level as either an
+                # integer or a byte. Apply the same normalization to both inputs.
+                self.sync = diagnostic_snapshot(status, self.node.get_clock().now().nanoseconds)
 
     def spin(self, seconds=.05):
         self.rclpy.spin_once(self.node, timeout_sec=seconds)

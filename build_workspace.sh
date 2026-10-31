@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Reproducible root build; C++20 also applies to generated interface targets.
+# Build selected packages; each package owns its language and compiler options.
 set -euo pipefail
 
 workspace_build_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
@@ -10,16 +10,12 @@ if [[ -z "${ROS_DISTRO:-}" ]]; then
 fi
 for workspace_build_arg in "$@"; do
   if [[ "$workspace_build_arg" == --cmake-args* ]]; then
-    echo "Use colcon selection options only; this entry point fixes the required CMake arguments." >&2
+    echo "Use colcon selection options; set language requirements in the owning package's CMakeLists.txt." >&2
     exit 2
   fi
 done
-bash docker/openvins/apply_compat.sh
 export CMAKE_BUILD_PARALLEL_LEVEL=${CMAKE_BUILD_PARALLEL_LEVEL:-4}
 export MAKEFLAGS=${MAKEFLAGS:--j4}
 exec colcon build --symlink-install --executor sequential "$@" \
   --cmake-args -DPython3_EXECUTABLE=/usr/bin/python3 \
-  -DCMAKE_CXX_STANDARD=20 -DCMAKE_CXX_STANDARD_REQUIRED=ON \
-  -DCMAKE_CXX_EXTENSIONS=OFF -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
-  "-DCMAKE_PROJECT_INCLUDE=$workspace_build_root/cmake/RequireCxx20.cmake" \
-  '-DCMAKE_CXX_FLAGS=-Wall -Wextra -Wpedantic'
+  -DCMAKE_EXPORT_COMPILE_COMMANDS=ON

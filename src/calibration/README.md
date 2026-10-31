@@ -2,6 +2,10 @@
 
 Owner: SilverWolf（框架 / VIO）。ROS 2 Humble/Jazzy 的 D435i 双目采集、相机内参求解与飞控 IMU 联合标定工具。硬件只由 `drone_bringup` 启动；本包订阅数据或离线读取 bag，不打开相机、飞控串口。
 
+当前实现与 `Project.md` v0.5 需求有以下差异：双目标定沿用已有 RMS、覆盖率和数量检查；联合标定仍调用 Docker 中的 Kalibr，尚未实现项目要求的 ROS 2 原生联合求解；MAVLink 140 Hz、DDS 200 Hz、Allan 前置要求及工程先验发布规则属于历史流程。以下说明记录现有工具的实际行为，这些历史数值门槛不作为新版 A0 需求的验收标准。新版需求采用 DDS 主链路、优先记录厂商噪声来源，并由开发者组织功能验收；后续实现应按新需求推进，不能将当前历史流程视为新需求已完成。
+
+DDS 离线血缘检查采用采集诊断中记录的 `sync_budget_us` 运行策略；历史记录缺少该字段时沿用 1000 µs，MAVLink 历史检查保持不变。
+
 ## 输入与棋盘格
 
 - 左右 IR 图像：`/camera/infra1/image_rect_raw`、`/camera/infra2/image_rect_raw`，`sensor_msgs/msg/Image`，SensorDataQoS（best effort、volatile）。
@@ -29,7 +33,7 @@ bash build_workspace.sh --packages-up-to calibration
 source install/setup.bash
 ```
 
-C++20，依赖 OpenCV、yaml-cpp、rclcpp、sensor_msgs、message_filters。Python 离线工具的依赖见 `requirements-tools.txt`；Humble 使用相应 ROS setup 文件。
+C++17，依赖 OpenCV、yaml-cpp、rclcpp、sensor_msgs、message_filters。Python 离线工具的依赖见 `requirements-tools.txt`；Humble 使用相应 ROS setup 文件。
 
 ## 真实数据采集
 

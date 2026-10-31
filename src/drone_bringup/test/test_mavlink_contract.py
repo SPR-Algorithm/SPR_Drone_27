@@ -10,6 +10,7 @@ import yaml
 from drone_bringup.config import load_rig, imu_provenance
 from drone_bringup.mavlink_contract import (diagnostic_snapshot, mavlink_parameters,
                                           profile_annotations, PROFILE)
+from drone_bringup.preflight import SensorProbe
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -66,3 +67,24 @@ def test_provenance_rejects_insufficient_or_wrong_timing_evidence(key, value):
     snapshot[key] = value
     with pytest.raises(ValueError):
         imu_provenance(load_rig(RIG), {}, snapshot)
+
+
+@pytest.mark.parametrize("profile,name", [
+    ("dds_runtime", "px4_bridge/imu"),
+    (PROFILE, "drone_bringup/mavlink_imu"),
+])
+@pytest.mark.parametrize("level", [0, b"\x00"])
+def test_preflight_normalizes_only_the_selected_imu_diagnostic(profile, name, level):
+    probe = object.__new__(SensorProbe)
+    probe.rig = {"calibration_profile": profile}
+    probe.sync = {}
+    probe.node = SimpleNamespace(get_clock=lambda: SimpleNamespace(
+        now=lambda: SimpleNamespace(nanoseconds=123)))
+    status = SimpleNamespace(name=name, level=level, message="synchronized", values=[
+        SimpleNamespace(key="sync_ready", value="True"),
+        SimpleNamespace(key="host_minus_px4_offset_us", value="12.5")])
+    ignored = SimpleNamespace(name="unrelated_px4_bridge/status", level=2,
+                              message="unrelated", values=[])
+    probe.diagnostic(SimpleNamespace(status=[status, ignored]))
+    assert probe.sync == {"level": 0, "message": "synchronized", "sync_ready": True,
+                          "host_minus_px4_offset_us": 12.5, "received_at_ns": 123}

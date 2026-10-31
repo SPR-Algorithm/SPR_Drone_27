@@ -6,6 +6,6 @@
 - `/spr/imu`：`imu_link`，FLU；PX4 原始 FRD 仅在 `px4_bridge` 内转换，矩阵 diag(1,-1,-1)。
 - `T_cn_cnm1`：cam0 到 cam1；`T_cam_imu`：IMU 到相机；其逆为 `T_imu_cam`。
 - 无联合标定时不得生成单位矩阵假装已测外参。
-- 后续 VIO 为 `vio_odom`；`state` 负责 `world/odom/base_link` 动态 TF。A0 采集不发布伪造的世界变换，RealSense 驱动 TF 关闭。
+- VIO 的具体参考坐标系及后续阶段的 `world/odom/base_link` 动态 TF 归属尚待定义，见 [Project.md](../Project.md)。A0 采集不发布伪造的世界变换，RealSense 驱动 TF 关闭。
 
 联合采集须刚性固定相机和飞控、固定标定板，再整体移动组件；移动板并保持相机/IMU 不动无法激励联合标定。

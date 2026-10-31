@@ -55,10 +55,10 @@ class TimeSyncGate:
                   max_clock_step_s, max_transport_age_s]
         if (not all(math.isfinite(float(value)) for value in values) or
                 min_samples < 1 or int(min_samples) != min_samples or max_uncertainty_us <= 0 or
-                max_uncertainty_us > 1000 or timeout_s <= 0 or
+                timeout_s <= 0 or
                 max_offset_step_us <= 0 or max_clock_step_s <= 0 or
                 max_transport_age_s <= 0):
-            raise ValueError('invalid timesync gate configuration; budget must be <=1 ms')
+            raise ValueError('timesync sample count and finite positive limits are required')
         self.min_samples = int(min_samples)
         self.max_uncertainty_us = float(max_uncertainty_us)
         self.timeout_ns = round(timeout_s * 1e9)

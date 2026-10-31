@@ -1,9 +1,0 @@
-<?xml version="1.0"?>
-<package format="3">
-  <name>planning</name><version>0.1.0</version>
-  <description>Planning team integration boundary</description>
-  <maintainer email="silverwolf@example.com">SilverWolf</maintainer><license>MIT</license>
-  <buildtool_depend>ament_cmake</buildtool_depend>
-  <exec_depend>drone_interfaces</exec_depend>
-  <export><build_type>ament_cmake</build_type></export>
-</package>

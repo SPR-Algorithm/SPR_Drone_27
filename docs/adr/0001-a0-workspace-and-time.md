@@ -2,6 +2,11 @@
 Date: 2026-10-29. Status: implemented for bench calibration; team review pending.
 Owner: SilverWolf.
 
+2026-11-01 applicability: the sampling-time and coordinate explanations remain
+historical implementation context. Project.md v0.5 supersedes the old universal
+rate and 1 ms acceptance requirements; current bridge limits are configurable
+run policies. This record does not establish current A0 acceptance.
+
 The requested implementation starts from Project.md v0.3. Packages move to a
 single root colcon workspace; historical raw captures remain at calibration/data
 behind COLCON_IGNORE. OpenVINS remains a Git submodule at its original

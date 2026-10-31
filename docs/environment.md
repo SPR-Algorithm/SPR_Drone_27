@@ -9,15 +9,17 @@ source /opt/ros/jazzy/setup.bash
 git submodule update --init --recursive
 vcs import . < dependencies.repos
 rosdep install --from-paths src --ignore-src -r -y
-CMAKE_BUILD_PARALLEL_LEVEL=2 bash build_workspace.sh
+CMAKE_BUILD_PARALLEL_LEVEL=2 bash build_workspace.sh --packages-up-to tools
 source install/setup.bash
 ```
 
-`build_workspace.sh` 应用固定的 OpenVINS 兼容补丁并注入 C++20 target policy，包括 ROS 自动生成接口；不要用仅设置 Python 路径的普通构建命令代替。Humble 主机替换 setup 路径；ARM64/Humble 尚需实际 runner/目标板验证，不能用本机 Jazzy 构建代替。
+`build_workspace.sh` 保留各包自己的构建要求，不自动应用第三方补丁。自主维护的 C++ 目标在各包 CMake 中明确要求 C++17 和 GCC/Clang 警告；OpenVINS 与 `px4_msgs` 保留上游构建要求。仅构建目标功能时优先传入 `--packages-up-to <包名>`。
+
+固定 OpenVINS 版本在 Jazzy 上需要头文件兼容准备，构建它之前按 [兼容说明](../docker/openvins/README.md) 显式处理；不要仅为统一语言标准修改第三方。曾使用 C++20 全局配置的旧构建目录应另行保留，本轮使用独立 build/install/log 目录，避免继承缓存中的旧编译选项。Humble 主机替换 setup 路径；ARM64/Humble 尚需实际目标板验证，不能用本机 Jazzy 构建代替。
 
 ## 当前 MAVLink 采集依赖
 
-当前联合标定的飞控通路使用 USB MAVLink，飞控 DDS 仍冻结。为 MAVLink 采集器安装单独的 Python 依赖：
+现有联合标定采集入口使用 USB MAVLink；它是保留的历史流程，当前 `Project.md` 的 A0 主链路已改为 uXRCE-DDS。下列步骤用于现有 MAVLink 采集器的独立 Python 依赖：
 
 ```bash
 /usr/bin/python3 -m venv --system-site-packages .venv-sensors
@@ -65,7 +67,7 @@ export ROS_LOCALHOST_ONLY=1
 export SPR_MAVLINK_PYTHONPATH="$(.venv-sensors/bin/python -c 'import sysconfig; print(sysconfig.get_path("purelib"))')"
 ```
 
-两个库目录都须加入；从同一 shell 执行 [MAVLink 采集命令](joint-calibration.md#采集拟合与留出的真实数据)，让所有子进程继承相同环境。关闭该 shell 并移除临时解包目录即可撤销。此选择只作用于主机 ROS 2 通信，全局默认 RMW 合同和飞控 DDS 冻结状态保持原样。早先 FastDDS 录包缺口的根因尚未证实；上述采集成功也不代表联合标定验收通过。
+两个库目录都须加入；从同一 shell 执行 [MAVLink 采集命令](joint-calibration.md#采集拟合与留出的真实数据)，让所有子进程继承相同环境。关闭该 shell 并移除临时解包目录即可撤销。此选择只作用于主机 ROS 2 通信，不改变飞控通信配置。早先 FastDDS 录包缺口的根因尚未证实；上述采集成功也不代表联合标定验收通过。
 
 ## 离线标定依赖
 
@@ -83,4 +85,4 @@ pip install -r src/calibration/requirements-tools.txt
 
 联合求解读取本地 Kalibr Docker 镜像并解析到不可变镜像 ID；现有基镜像 `rm-nav-kalibr:local` 对应 Kalibr commit `1f60227442d25e36365ef5f72cd80b9666d73467`。实际求解发现该镜像的 bsplines 缺少 CHOLMOD 直接链接，须先按 [容器修复说明](../docker/kalibr/README.md) 离线构建 `spr-kalibr-cholmod:local`；这是当前求解默认镜像，原镜像保留。新机器的完整容器构建/分发、ARM64 和 CI 仍需补齐；目前不宣称干净机器全链路验收完成。
 
-DDS 主机 Agent 的锁定版本及准备材料位于 `docker/px4/`，当前阶段冻结，不是 MAVLink 标定的安装或运行前置条件。
+DDS 主机 Agent 的锁定版本及准备材料位于 `docker/px4/`，不属于现有 MAVLink 采集的前置条件；新版 A0 的 DDS 通路需单独准备与验证。

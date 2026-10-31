@@ -10,10 +10,9 @@ fi
 compat_script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 compat_checkout=${1:-"$compat_script_dir/../../src/open_vins"}
 compat_revision=69488123ed9362dd44b6f28e7f4680abbff1442b
-compat_patch_names=(jazzy_compat.patch cxx20.patch)
+compat_patch_names=(jazzy_compat.patch)
 compat_patch_hashes=(
   0a8cbc71ee55baefb673f51f6c2a9fa19b3956891518e2fcd15aaea926e608cf
-  634aec98e1688c4fbfc1ee412fba914d8fff6dc60cfa593e386480cf0f56c6a1
 )
 compat_pending=()
 compat_checkout=$(cd -- "$compat_checkout" && pwd)

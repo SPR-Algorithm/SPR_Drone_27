@@ -1,6 +1,7 @@
 """ROS transport for the read-only A0 IMU bridge; no device or control access."""
 
 from collections import Counter
+import math
 import time
 
 from diagnostic_msgs.msg import DiagnosticArray, DiagnosticStatus, KeyValue
@@ -51,8 +52,9 @@ class Px4ImuBridge(Node):
             raise ValueError('timestamp_source must be integration_midpoint')
         if self.get_parameter('use_sim_time').value:
             raise ValueError('real-agent time mapping requires use_sim_time=false; replay /spr/imu directly')
-        if not cfg['imu_frame_id'] or cfg['min_rate_hz'] <= 0:
-            raise ValueError('imu_frame_id and positive min_rate_hz are required')
+        if (not cfg['imu_frame_id'] or not math.isfinite(cfg['min_rate_hz']) or
+                cfg['min_rate_hz'] <= 0):
+            raise ValueError('imu_frame_id and finite positive min_rate_hz are required')
         self.gyro_covariance = list(diagonal_covariance(cfg['gyro_variance']))
         self.accel_covariance = list(diagonal_covariance(cfg['accel_variance']))
         self.sync = TimeSyncGate(
@@ -96,7 +98,11 @@ class Px4ImuBridge(Node):
             'agent-synced timestamps, integration midpoints; waiting for DDS timesync quality gate')
 
     @staticmethod
-    def _reject_runtime_reconfiguration(_parameters):
+    def _reject_runtime_reconfiguration(parameters):
+        # Only bridge policy and its wall-clock requirement are immutable.
+        if not any(parameter.name in DEFAULTS or parameter.name == 'use_sim_time'
+                   for parameter in parameters):
+            return SetParametersResult(successful=True)
         return SetParametersResult(
             successful=False, reason='PX4 IMU configuration is fixed for a continuous run; restart via bringup')
 

@@ -1,5 +1,10 @@
 # MAVLink input for offline calibration
 
+This is the retained bench implementation. The current [Project.md](../../Project.md)
+requires uXRCE-DDS for the A0 IMU path and real-time OpenVINS; this MAVLink
+entrypoint does not satisfy that requirement. Its rate and timing thresholds
+remain checks for existing captures, not the current project's acceptance criteria.
+
 `drone_bringup.mavlink_imu.main()` starts `calibration_mavlink_imu`. It owns the
 flight-controller USB endpoint with the same `DeviceLock` as other bringup
 devices. The supervisor must not hold a second lock for this child. QGC, MAVROS,
@@ -75,16 +80,18 @@ delivered approximately 140–164 Hz for requests of 200, 250, and 1000 Hz. A
 successful command ACK is not evidence of 200 Hz delivery. The standalone owner
 defaults to a 200 Hz measured rate gate and reports WARN for these captures. The
 unified MAVLink test rig explicitly requests 1000 Hz and gates actual delivery
-at 140 Hz; it never changes the DDS 200 Hz contract. Actual input
+at 140 Hz; the existing DDS rig separately retains its 200 Hz configured check. Actual input
 timestamp rate, reception rate, jitter, gaps, clock-fit residual, and RTT remain
 available in diagnostics and `status.json`; do not lower a gate to label the
-project requirement complete.
+current DDS or VIO requirement complete.
 
-The user separately authorized a 140 Hz **test** profile. Set
+The historical 140 Hz **test** profile uses
 `min_rate_hz:=140.0` and `deployment_scope:=mavlink_140hz_test_only` explicitly
-for that profile; retain the measured rate, jitter, gaps, synchronization fit,
-and stationary-motion checks. This opt-in test does not pass the original
-200 Hz requirement or establish flight deployment readiness.
+for that profile and retains measured rate, jitter, gaps, synchronization fit,
+and stationary-motion checks. The `original_dds_200hz_requirement_satisfied`
+manifest field is retained for old capture compatibility; the current requirement
+does not freeze a universal IMU frequency threshold. This profile does not prove
+DDS input or flight deployment readiness.
 
 Captured real TIMESYNC regressions, including a host clock step, run with:
 

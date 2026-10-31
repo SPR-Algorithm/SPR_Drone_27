@@ -89,10 +89,20 @@ def imu_provenance(rig, baseline, synchronization):
         raise ValueError("IMU diagnostic does not prove host timestamp conversion semantics")
     if snapshot.get("sync_protocol") != "uxrce_dds_timesync_status":
         raise ValueError("IMU diagnostic is not from DDS synchronization")
-    offset = float(snapshot["host_minus_px4_offset_us"])
-    uncertainty = float(snapshot["sync_uncertainty_us"])
-    if not math.isfinite(offset) or not math.isfinite(uncertainty) or not 0 <= uncertainty <= 1000:
-        raise ValueError("IMU measured time uncertainty must be finite and <=1 ms")
+    try:
+        offset = float(snapshot["host_minus_px4_offset_us"])
+        uncertainty = float(snapshot["sync_uncertainty_us"])
+        # Older DDS recordings predate the explicit diagnostic budget field.
+        recorded_budget = snapshot.get("sync_budget_us", 1000.0)
+        if isinstance(recorded_budget, bool):
+            raise ValueError("a boolean is not a synchronization budget")
+        budget = float(recorded_budget)
+    except (KeyError, TypeError, ValueError) as error:
+        raise ValueError("IMU measured time offset/uncertainty/budget is missing or invalid") from error
+    if not math.isfinite(budget) or budget <= 0:
+        raise ValueError("IMU synchronization budget must be finite and positive")
+    if not math.isfinite(offset) or not math.isfinite(uncertainty) or not 0 <= uncertainty <= budget:
+        raise ValueError("IMU measured time uncertainty must be finite, nonnegative and within the recorded budget")
     return dict(rig["imu"], bridge_commit=baseline.get("commit"),
                 bridge_code_dirty=baseline.get("effective_clean") is not True,
                 approved_source_patches=copy.deepcopy(baseline.get("approved_patches", {})),

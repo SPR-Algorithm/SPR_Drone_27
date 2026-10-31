@@ -124,9 +124,20 @@ def test_boot_domain_imu_does_not_fall_back_to_receive_time():
     assert not gate.ready
 
 
-def test_budget_cannot_be_relaxed_beyond_one_millisecond():
-    with pytest.raises(ValueError, match='budget'):
-        TimeSyncGate(max_uncertainty_us=1001)
+def test_uncertainty_limit_is_an_explicit_run_policy():
+    gate = ready_gate(max_uncertainty_us=1500)
+    assert gate.observe(status(EPOCH_US + 2000, round_trip_time=2400),
+                        (EPOCH_US + 2000) * 1000, 2_000_000)
+    assert gate.uncertainty_us == 1210
+    assert not gate.observe(status(EPOCH_US + 3000, round_trip_time=3000),
+                            (EPOCH_US + 3000) * 1000, 3_000_000)
+    assert gate.reason == 'timesync_uncertainty_exceeded'
+
+
+@pytest.mark.parametrize('limit', [0, -1, float('nan'), float('inf')])
+def test_invalid_uncertainty_limits_are_rejected(limit):
+    with pytest.raises(ValueError, match='finite positive limits'):
+        TimeSyncGate(max_uncertainty_us=limit)
 
 
 def test_integration_endpoint_becomes_midpoint_with_nanosecond_precision():

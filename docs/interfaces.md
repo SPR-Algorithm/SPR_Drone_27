@@ -1,6 +1,6 @@
 # A0 接口实现状态
 
-接口真源为 Project.md §§4–5 及 [ADR 0002](adr/0002-mavlink-calibration-phase.md)。当前先使用 MAVLink 联合标定，DDS 留待后续迁移。
+接口需求以 [Project.md](../Project.md) 第 3–4 节为准。下表描述现有实现；旧 MAVLink 阶段记录在 [ADR 0002](adr/0002-mavlink-calibration-phase.md)，其阶段安排已被新需求基线替代，DDS 主链路仍待迁移。
 
 | 接口 | 当前实现 | 说明 |
 | --- | --- | --- |
@@ -9,7 +9,7 @@
 | `/spr/imu` | 后续 DDS 通路，冻结 | 不由当前 MAVLink profile 发布；尚未完成 DDS 实机验收 |
 | `/spr/diagnostics` | 当前 MAVLink 时间/频率诊断 | best_effort；bringup 读取实际拟合、RTT、频率和连续段，保存到 manifest |
 | 自定义四类消息 | drone_interfaces 0.1.0 已生成 | 草案，未团队冻结 |
-| VIO/state/offboard | 尚无项目运行节点 | 预留包不可当作飞行功能 |
+| VIO/状态聚合/offboard | 尚无项目运行节点 | 相关功能尚未实现 |
 
 RealSense DEFAULT QoS 的发布队列深度为 10；图像/录制订阅队列为 5。
 共享契约的深度差异及时间语义修正记录在 ADR 0001。`calibration` 的采集订阅器当前使用 SensorDataQoS，可兼容可靠图像发布；正式 VIO 使用可靠订阅。

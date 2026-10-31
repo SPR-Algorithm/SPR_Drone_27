@@ -33,14 +33,16 @@ colcon test --packages-select px4_bridge
 The canonical default parameters live in `config/px4.yaml`; bringup loads this
 file, then rig overrides for topics, `imu_frame_id`, and rate/gap policy. Parameter
 changes require restarting the node. Default `min_rate_hz=200` is a target checked
-in diagnostics; the bridge cannot increase the PX4 publication rate. Change the
-firmware's DDS stream configuration and measure the real rate before calibration.
+in diagnostics, not a project acceptance requirement; the bridge cannot increase
+the PX4 publication rate. Change the firmware's DDS stream configuration and
+measure the real rate before calibration.
 
 ## Frames and measurement semantics
 
-`SensorCombined` vectors are already SI units in the board-corrected FRD body
-frame. Rotate both by `diag(1,-1,-1)` into `imu_link` (FLU), preserving specific
-force including gravity; do not normalize or subtract gravity. Bringup owns the
+`SensorCombined` angular velocity is in rad/s and acceleration is in m/s², both
+in the board-corrected FRD body frame. Rotate both by `diag(1,-1,-1)` into
+`imu_link` (FLU), preserving specific force including gravity; do not normalize
+or subtract gravity. Bringup owns the
 static `base_link`/`imu_link` transform. This node publishes no TF.
 
 PX4 1.16 `SensorCombined` **has no `timestamp_sample`**. `timestamp` is the gyro
@@ -54,9 +56,10 @@ accelerometer sample. The first unbracketed sample is discarded and counted.
 
 Orientation is unavailable (`orientation_covariance[0]=-1`). All-zero rate/accel
 covariance means **unknown**, per `sensor_msgs/Imu`; it does not mean zero noise.
-Positive diagonal measurement variances may be configured from a validated IMU
-noise model. They stay conservative during interpolation. The `[-1,-1,-1]`
-configuration sentinel means unknown; partial unknown entries are invalid.
+Positive diagonal measurement variances in (rad/s)² and (m/s²)² may be configured
+from a validated IMU noise model. They stay conservative during interpolation.
+The `[-1,-1,-1]` configuration sentinel means unknown; partial unknown entries
+are invalid.
 See the [standard Imu covariance contract](https://docs.ros.org/en/jazzy/p/sensor_msgs/msg/Imu.html).
 
 ## Time protocol and continuous segments
@@ -70,9 +73,11 @@ already host time. Boot-domain input, absent synchronization, and stale or futur
 messages fail closed rather than substituting message receipt time.
 
 Publication requires 20 consecutive DDS-source quality samples (default), each
-with `RTT/2 + abs(observed_offset-estimated_offset) <= 1000 us`. This observable
-packet/filter budget assumes the normal two-way timing model; it is **not a
-ground-truth demonstration of <=1 ms physical accuracy**. The real rig still
+with `RTT/2 + abs(observed_offset-estimated_offset) <= sync_max_uncertainty_us`
+(default `1000 us`). This positive, finite parameter is a run policy; the current
+Project.md does not freeze a numerical synchronization acceptance threshold.
+This observable packet/filter budget assumes the normal two-way timing model;
+it is **not a ground-truth demonstration of physical timing accuracy**. The real rig still
 needs a measured timing report. Status timeout, host clock step, offset jump,
 PX4 restart, calibration-count change, and IMU disconnection end the segment,
 clear interpolation buffers, and require fresh synchronization. Input downtime
@@ -91,8 +96,10 @@ live-agent bridge intentionally rejects `use_sim_time=true`.
 
 ## Authoritative semantics
 
-These source-based corrections to the draft Project.md §4.4 must remain in the
-time ADR and interface documentation:
+The message and firmware sources below support the sampling and time mapping
+semantics in Project.md's current REQ-A0-002 and REQ-A0-003. Historical ADRs may
+retain the earlier draft's numerical gates; the current project requirements
+take precedence:
 
 - [PX4 1.16 SensorCombined definition](https://github.com/PX4/PX4-Autopilot/blob/v1.16.0/msg/SensorCombined.msg)
 - [VotedSensorsUpdate integration endpoint](https://github.com/PX4/PX4-Autopilot/blob/v1.16.0/src/modules/sensors/voted_sensors_update.cpp)
@@ -106,4 +113,5 @@ serial loss/reconnect, actual clock accuracy, ARM64 latency, and calibrated
 camera/FCU mounting remain rig acceptance checks, not claims from synthetic tests.
 The ROS publisher tests are disabled by default and require explicit
 `SPR_ALLOW_SYNTHETIC_ROS_TESTS=1`; keep that unset during hardware work. They have
-not been run under the current real-data-only verification constraint.
+to be run separately in an isolated offline ROS environment; passing the pure
+conversion tests does not verify transport or hardware behavior.

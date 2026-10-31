@@ -29,19 +29,32 @@ def sha256(path):
 
 OPENVINS_BASE = "69488123ed9362dd44b6f28e7f4680abbff1442b"
 OPENVINS_PATCH_SHA256 = "0a8cbc71ee55baefb673f51f6c2a9fa19b3956891518e2fcd15aaea926e608cf"
-OPENVINS_CXX20_PATCH_SHA256 = "634aec98e1688c4fbfc1ee412fba914d8fff6dc60cfa593e386480cf0f56c6a1"
-OPENVINS_COMBINED_DIFF_SHA256 = "5c70ab56ae38bac04b71d69e1710b990ac42f71765892b24a24d90f4bda3b7c2"
+OPENVINS_COMBINED_DIFF_SHA256 = OPENVINS_PATCH_SHA256
 OPENVINS_APPROVED_PATCHES = {
     "docker/openvins/jazzy_compat.patch": OPENVINS_PATCH_SHA256,
-    "docker/openvins/cxx20.patch": OPENVINS_CXX20_PATCH_SHA256,
 }
 OPENVINS_PATCHED_FILES = {
-    "ov_core/CMakeLists.txt": "609f3ae53e8dcacd6369e6d62c07014c4c97aa10f6153f396062cd32fac9bbdb",
-    "ov_eval/CMakeLists.txt": "39152a7e54066db03d6909b78310ca4f040da37b17eb14a3b4966a5f98ceb4cd",
-    "ov_init/CMakeLists.txt": "0a906bcdf8c2215e9ae835a7e4005d1191caa94913153c59310feeb76b64c24b",
-    "ov_msckf/CMakeLists.txt": "970047d4541ddf49ef9db1768a1c5ef22bc61ef4d1a4617e49d393733f27ca2c",
     "ov_msckf/src/ros/ROS2Visualizer.h": "d1b14228b0779c81b029b3d6da1fe8494f4712641e4fb20827ac626b87b36b26",
     "ov_msckf/src/ros/ROSVisualizerHelper.h": "4594c6a8dde74c95fde48db78b0a07db9f1e6e858e5dff5d7206f659f4a2839e",
+}
+
+# Read-only provenance for captures made under the superseded C++20 policy.
+# New captures are checked against the current Jazzy-only patch set above.
+OPENVINS_LEGACY_CXX20_PATCH = {
+    "base_commit": OPENVINS_BASE,
+    "patches": [
+        {"path": "docker/openvins/jazzy_compat.patch", "sha256": OPENVINS_PATCH_SHA256},
+        {"path": "docker/openvins/cxx20.patch",
+         "sha256": "634aec98e1688c4fbfc1ee412fba914d8fff6dc60cfa593e386480cf0f56c6a1"},
+    ],
+    "diff_sha256": "5c70ab56ae38bac04b71d69e1710b990ac42f71765892b24a24d90f4bda3b7c2",
+    "patched_files_sha256": {
+        **OPENVINS_PATCHED_FILES,
+        "ov_core/CMakeLists.txt": "609f3ae53e8dcacd6369e6d62c07014c4c97aa10f6153f396062cd32fac9bbdb",
+        "ov_eval/CMakeLists.txt": "39152a7e54066db03d6909b78310ca4f040da37b17eb14a3b4966a5f98ceb4cd",
+        "ov_init/CMakeLists.txt": "0a906bcdf8c2215e9ae835a7e4005d1191caa94913153c59310feeb76b64c24b",
+        "ov_msckf/CMakeLists.txt": "970047d4541ddf49ef9db1768a1c5ef22bc61ef4d1a4617e49d393733f27ca2c",
+    },
 }
 
 

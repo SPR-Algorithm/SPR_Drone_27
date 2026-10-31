@@ -39,6 +39,42 @@ class JointContractTests(unittest.TestCase):
         self.assertTrue(any("timesync_snapshot" in message for message in errors))
         self.assertTrue(any("exposure" in message for message in errors))
 
+    @staticmethod
+    def dds_timing_manifest():
+        """Format-only evidence; this does not claim real sensor acquisition."""
+        return {"experimental": False, "imu": {
+            "source": "px4_bridge", "frame_id": "imu_link", "time_domain": "host_ros",
+            "bridge_commit": "a" * 40, "bridge_code_dirty": False,
+            "T_host_px4_offset_s": 12.5 / 1e6,
+            "timesync_snapshot": {"level": 0, "sync_ready": True,
+                "timestamp_mode": "agent_synced_no_second_offset",
+                "sync_protocol": "uxrce_dds_timesync_status",
+                "host_minus_px4_offset_us": 12.5,
+                "sync_uncertainty_us": 1200.0, "sync_budget_us": 1500.0}}}
+
+    def test_dds_provenance_uses_the_recorded_budget_and_legacy_default(self):
+        manifest = self.dds_timing_manifest()
+        self.assertEqual(provenance_errors(manifest, camera_required=False), [])
+        snapshot = manifest["imu"]["timesync_snapshot"]
+        del snapshot["sync_budget_us"]
+        self.assertTrue(provenance_errors(manifest, camera_required=False))
+        snapshot["sync_uncertainty_us"] = 1000.0
+        self.assertEqual(provenance_errors(manifest, camera_required=False), [])
+
+    def test_dds_provenance_rejects_invalid_or_missing_timing_evidence(self):
+        for key, value in [("sync_budget_us", 0), ("sync_budget_us", -1),
+                           ("sync_budget_us", float("nan")), ("sync_budget_us", float("inf")),
+                           ("sync_budget_us", None), ("sync_budget_us", True),
+                           ("sync_uncertainty_us", -1), ("sync_uncertainty_us", float("nan")),
+                           ("sync_uncertainty_us", 1501.0)]:
+            with self.subTest(key=key, value=value):
+                manifest = self.dds_timing_manifest()
+                manifest["imu"]["timesync_snapshot"][key] = value
+                self.assertTrue(provenance_errors(manifest, camera_required=False))
+        manifest = self.dds_timing_manifest()
+        del manifest["imu"]["timesync_snapshot"]["sync_uncertainty_us"]
+        self.assertTrue(provenance_errors(manifest, camera_required=False))
+
     def test_opencv_dialect_is_only_generated_at_final_export(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "final.yaml"

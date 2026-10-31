@@ -2,6 +2,12 @@
 
 Date: 2026-10-29. Status: implementation prepared; build verification pending.
 
+2026-11-01 status: superseded by Project.md v0.5 and the current AGENTS.md.
+Project-owned C++ targets now require C++17; the recursive target policy and
+language-standard patch have been removed. Third-party targets retain upstream
+requirements, and builds no longer apply compatibility patches automatically.
+The text below records the former decision and is not a current build instruction.
+
 ## Requirement and conflict
 
 The current repository `AGENTS.md` requires every C++ target to use C++20 with

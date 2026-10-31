@@ -1,4 +1,4 @@
-"""Separate, opt-in MAVLink bench contract; frozen DDS settings are untouched."""
+"""Existing MAVLink bench checks and IMU diagnostic decoding."""
 import ast
 import copy
 import math
@@ -12,6 +12,8 @@ SCOPE = "mavlink_140hz_test_only"
 def profile_annotations(profile):
     result = {"calibration_profile": profile}
     if profile == PROFILE:
+        # Keep the legacy field for saved-run compatibility. Current A0
+        # requirements use DDS and do not freeze a universal IMU rate threshold.
         result.update(calibration_phase="mavlink_140hz_test", deployment_scope=SCOPE,
                       minimum_observed_imu_rate_hz=MIN_RATE_HZ,
                       original_dds_200hz_requirement_satisfied=False)
